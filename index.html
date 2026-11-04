@@ -54,6 +54,13 @@
   .filter { display: flex; gap: 6px; margin-top: 16px; flex-wrap: wrap; }
   .filter button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
   small.help { color: var(--muted); font-size: 12px; }
+  .groups { display: flex; gap: 6px; margin-top: 16px; overflow-x: auto; padding-bottom: 2px; }
+  .groups button { white-space: nowrap; border-radius: 999px; font-size: 14px; padding: 5px 12px; }
+  .groups button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .groups button .n { opacity: .7; margin-left: 4px; }
+  .ghead { display: flex; justify-content: space-between; align-items: baseline; margin: 22px 0 -4px; }
+  .ghead b { font-size: 16px; }
+  .ghead span { font-size: 13px; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -72,6 +79,9 @@
     <b id="formTitle">Thêm việc</b>
     <label>Tên công việc</label>
     <input id="fTitle" maxlength="200">
+    <label>Nhóm</label>
+    <input id="fGroup" maxlength="50" list="groupList" placeholder="Ví dụ: Công ty, Cá nhân, Học tập… (bỏ trống nếu không cần)">
+    <datalist id="groupList"></datalist>
     <div class="grid2">
       <div><label>Deadline</label><input id="fDeadline" type="date"></div>
       <div><label>Nhắc gấp trước (ngày)</label><input id="fRemind" type="number" min="0" max="60" value="3"></div>
@@ -86,6 +96,7 @@
     </div>
   </div>
 
+  <div class="groups" id="groups"></div>
   <div class="stats" id="stats"></div>
   <div class="filter" id="filter">
     <button data-f="open" class="on">Chưa xong</button>
@@ -110,6 +121,9 @@
   let editingId = null;
   let filter = "open";
   let saving = false;
+  const NO_GROUP = "Chưa phân nhóm";
+  let group = "*"; // "*" = tất cả nhóm
+  try { group = localStorage.getItem("nv_group") || "*"; } catch {}
 
   function msg(text, type = "ok") {
     const el = $("msg");
@@ -205,28 +219,27 @@
   const fmt = (dl) => (dl ? dl.split("-").reverse().join("/") : "");
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-  function render() {
-    const counts = { open: 0, overdue: 0, urgent: 0, done: 0 };
-    tasks.forEach((t) => {
-      const s = statusOf(t);
-      if (s === "done") counts.done++;
-      else counts.open++;
-      if (s === "overdue") counts.overdue++;
-      if (s === "today" || s === "soon") counts.urgent++;
-    });
-    $("stats").innerHTML = `
-      <div class="stat"><b>${counts.open}</b><span>Chưa xong</span></div>
-      <div class="stat"><b style="color:var(--red)">${counts.overdue}</b><span>Quá hạn</span></div>
-      <div class="stat"><b style="color:var(--orange)">${counts.urgent}</b><span>Sắp đến hạn</span></div>
-      <div class="stat"><b style="color:var(--green)">${counts.done}</b><span>Đã xong</span></div>`;
+  const groupOf = (t) => (t.group || "").trim() || NO_GROUP;
+  function groupNames() {
+    const names = [...new Set(tasks.map(groupOf))];
+    return names.sort((a, b) => (a === NO_GROUP) - (b === NO_GROUP) || a.localeCompare(b, "vi"));
+  }
+  const openCount = (list) => list.filter((t) => statusOf(t) !== "done").length;
 
-    const order = { overdue: 0, today: 1, soon: 2, later: 3, done: 4 };
-    const shown = tasks
-      .filter((t) => filter === "all" || (filter === "done" ? statusOf(t) === "done" : statusOf(t) !== "done"))
-      .sort((a, b) => order[statusOf(a)] - order[statusOf(b)] || (a.deadline || "9999").localeCompare(b.deadline || "9999"));
+  function renderGroups(names) {
+    if (group !== "*" && !names.includes(group)) group = "*";
+    const chip = (key, label, n) =>
+      `<button data-g="${esc(key)}" class="${group === key ? "on" : ""}">${esc(label)}<span class="n">${n}</span></button>`;
+    $("groups").innerHTML =
+      names.length > 1 || (names.length === 1 && names[0] !== NO_GROUP)
+        ? chip("*", "Tất cả nhóm", openCount(tasks)) +
+          names.map((g) => chip(g, g, openCount(tasks.filter((t) => groupOf(t) === g)))).join("")
+        : "";
+    $("groupList").innerHTML = names.filter((g) => g !== NO_GROUP).map((g) => `<option value="${esc(g)}">`).join("");
+  }
 
-    $("list").innerHTML = shown.length
-      ? shown.map((t) => `
+  function card(t) {
+    return `
         <div class="card task ${statusOf(t)}" data-id="${esc(t.id)}">
           <div class="row">
             <div>
@@ -243,14 +256,58 @@
             <input type="range" min="0" max="100" step="5" value="${+t.progress || 0}" data-act="prog" ${saving ? "disabled" : ""}>
             <span>${+t.progress || 0}%</span>
           </div>
-        </div>`).join("")
-      : `<div class="empty">${filter === "done" ? "Chưa có việc nào xong." : "Không có việc nào. Bấm “+ Thêm việc” để bắt đầu."}</div>`;
+        </div>`;
+  }
+
+  function render() {
+    const names = groupNames();
+    renderGroups(names);
+    const inGroup = group === "*" ? tasks : tasks.filter((t) => groupOf(t) === group);
+
+    const counts = { open: 0, overdue: 0, urgent: 0, done: 0 };
+    inGroup.forEach((t) => {
+      const s = statusOf(t);
+      if (s === "done") counts.done++;
+      else counts.open++;
+      if (s === "overdue") counts.overdue++;
+      if (s === "today" || s === "soon") counts.urgent++;
+    });
+    $("stats").innerHTML = `
+      <div class="stat"><b>${counts.open}</b><span>Chưa xong</span></div>
+      <div class="stat"><b style="color:var(--red)">${counts.overdue}</b><span>Quá hạn</span></div>
+      <div class="stat"><b style="color:var(--orange)">${counts.urgent}</b><span>Sắp đến hạn</span></div>
+      <div class="stat"><b style="color:var(--green)">${counts.done}</b><span>Đã xong</span></div>`;
+
+    const order = { overdue: 0, today: 1, soon: 2, later: 3, done: 4 };
+    const shown = inGroup
+      .filter((t) => filter === "all" || (filter === "done" ? statusOf(t) === "done" : statusOf(t) !== "done"))
+      .sort((a, b) => order[statusOf(a)] - order[statusOf(b)] || (a.deadline || "9999").localeCompare(b.deadline || "9999"));
+
+    if (!shown.length) {
+      $("list").innerHTML = `<div class="empty">${filter === "done" ? "Chưa có việc nào xong." : "Không có việc nào. Bấm “+ Thêm việc” để bắt đầu."}</div>`;
+      return;
+    }
+    // Xem "Tất cả nhóm" và có từ 2 nhóm trở lên: chia thành từng mục theo nhóm
+    if (group === "*" && names.length > 1) {
+      $("list").innerHTML = names
+        .map((g) => {
+          const items = shown.filter((t) => groupOf(t) === g);
+          if (!items.length) return "";
+          const late = items.filter((t) => statusOf(t) === "overdue").length;
+          return `<div class="ghead"><b>${esc(g)}</b><span>${items.length} việc${late ? ` · <span style="color:var(--red)">${late} quá hạn</span>` : ""}</span></div>` +
+            items.map(card).join("");
+        })
+        .join("");
+    } else {
+      $("list").innerHTML = shown.map(card).join("");
+    }
   }
 
   function openForm(t) {
     editingId = t ? t.id : null;
     $("formTitle").textContent = t ? "Sửa việc" : "Thêm việc";
     $("fTitle").value = t?.title || "";
+    $("fGroup").value = t ? t.group || "" : group !== "*" && group !== NO_GROUP ? group : "";
     $("fDeadline").value = t?.deadline || "";
     $("fRemind").value = t?.remindBefore ?? 3;
     $("fProgress").value = t?.progress ?? 0;
@@ -268,6 +325,7 @@
     if (!title) return msg("Nhập tên công việc", "err");
     const data = {
       title,
+      group: $("fGroup").value.trim(),
       deadline: $("fDeadline").value,
       progress: +$("fProgress").value,
       note: $("fNote").value.trim(),
@@ -307,6 +365,14 @@
     t.progress = +e.target.value;
     render();
     await save(`Tiến độ ${t.progress}%: ${t.title}`);
+  });
+
+  $("groups").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-g]");
+    if (!b) return;
+    group = b.dataset.g;
+    try { localStorage.setItem("nv_group", group); } catch {}
+    render();
   });
 
   $("filter").addEventListener("click", (e) => {

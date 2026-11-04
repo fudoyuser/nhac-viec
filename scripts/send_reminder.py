@@ -75,6 +75,23 @@ def when_text(days):
     return f"Còn {days} ngày"
 
 
+def group_of(t):
+    return (t.get("group") or "").strip()
+
+
+def group_summary(groups):
+    """Đếm số việc chưa xong theo nhóm, ví dụ: Công ty 3 · Cá nhân 2."""
+    counts = {}
+    for items in groups.values():
+        for t, _ in items:
+            g = group_of(t) or "Chưa phân nhóm"
+            counts[g] = counts.get(g, 0) + 1
+    if len(counts) < 2 and "Chưa phân nhóm" in counts:
+        return ""
+    names = sorted(counts, key=lambda g: (g == "Chưa phân nhóm", g.lower()))
+    return " · ".join(f"{html.escape(g)} <b>{counts[g]}</b>" for g in names)
+
+
 def render(groups, today, site_url):
     sections = [
         ("overdue", "🔴 Quá hạn", "#dc2626"),
@@ -86,6 +103,9 @@ def render(groups, today, site_url):
         '<div style="font-family:Arial,sans-serif;max-width:600px;color:#111">',
         f'<h2 style="margin:0 0 4px">Nhắc việc ngày {today.strftime("%d/%m/%Y")}</h2>',
     ]
+    summary = group_summary(groups)
+    if summary:
+        parts.append(f'<div style="font-size:13px;color:#555">Theo nhóm: {summary}</div>')
     for key, label, color in sections:
         items = groups[key]
         if not items:
@@ -95,9 +115,16 @@ def render(groups, today, site_url):
             dl = t.get("deadline")
             dl_txt = datetime.strptime(dl, "%Y-%m-%d").strftime("%d/%m/%Y") if dl else ""
             note = t.get("note", "").strip()
+            g = group_of(t)
+            tag = (
+                '<span style="background:#eef2ff;color:#3730a3;border-radius:999px;padding:1px 8px;'
+                f'font-size:12px;margin-right:6px">{html.escape(g)}</span>'
+                if g
+                else ""
+            )
             parts.append(
                 '<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:8px">'
-                f'<b>{html.escape(t.get("title", ""))}</b><br>'
+                f'{tag}<b>{html.escape(t.get("title", ""))}</b><br>'
                 f'<span style="font-size:13px;color:#555">{when_text(days)}'
                 f'{" · " + dl_txt if dl_txt else ""}</span><br>'
                 f"{bar(t.get('progress', 0))}"

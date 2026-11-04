@@ -40,6 +40,7 @@ Actions → *Gửi mail nhắc việc* → Run workflow.
 - **Giờ gửi mail**: sửa các dòng `cron` trong `.github/workflows/reminder.yml` (giờ UTC = giờ VN − 7).
 - **"Nhắc gấp trước (ngày)"** của từng việc: khi còn ≤ số ngày này, việc được đưa lên mục *Sắp đến hạn*.
 - Việc có tiến độ 100% được coi là xong và không còn được nhắc.
+- **Nhóm**: gõ tên nhóm khi thêm việc (Công ty, Cá nhân…). Website có thanh chọn nhóm, email gắn nhãn nhóm cho từng việc.
 
 ## Lưu ý
 - Ai có link website cũng xem và sửa được danh sách việc. Đừng chia sẻ link và đừng ghi thông tin nhạy cảm.
