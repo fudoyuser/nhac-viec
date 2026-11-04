@@ -66,12 +66,17 @@
   .checklist .due.late { color: var(--red); font-weight: 600; }
   .checklist .due.today { color: var(--orange); font-weight: 600; }
   .meta .sub { display: block; }
-  .item-row { display: grid; grid-template-columns: 22px 1fr 150px 34px; gap: 6px; align-items: center; margin-top: 6px; }
+  .item-row { display: grid; grid-template-columns: 22px 1fr 145px 130px 34px; gap: 6px; align-items: center; margin-top: 6px; }
+  .item-row .i-time { display: flex; align-items: center; gap: 2px; }
+  .item-row .i-time select { padding: 7px 4px; }
   .item-row input[type=checkbox] { width: 18px; height: 18px; margin: 0; }
   .item-row button { padding: 6px 0; }
   @media (max-width: 520px) {
-    .item-row { grid-template-columns: 22px 1fr 34px; }
-    .item-row .i-date { grid-column: 2 / 3; grid-row: 2; }
+    .item-row { grid-template-columns: 22px minmax(0, 1fr) auto 34px; }
+    .item-row .i-text { grid-column: 2 / 4; }
+    .item-row .i-date { grid-column: 2 / 3; grid-row: 2; min-width: 0; }
+    .item-row .i-time { grid-column: 3 / 5; grid-row: 2; }
+    .item-row .i-time select { width: 58px; }
   }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
   .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 12px; }
@@ -323,7 +328,7 @@
     let best = null;
     items(t).forEach((i) => {
       if (i.done || !i.deadline) return;
-      if (!best || i.deadline < best.deadline) best = i;
+      if (!best || i.deadline + (i.time || "99:99") < best.deadline + (best.time || "99:99")) best = i;
     });
     return best;
   }
@@ -333,7 +338,7 @@
     let s = statusAt(t.deadline, t.time, remindOf(t));
     const it = urgentItem(t);
     if (it) {
-      const si = statusAt(it.deadline, "", remindOf(t));
+      const si = statusAt(it.deadline, it.time || "", remindOf(t));
       if (STATUS_RANK[si] < STATUS_RANK[s]) s = si;
     }
     return s;
@@ -342,15 +347,18 @@
   function effDeadline(t) {
     const it = urgentItem(t);
     const main = (t.deadline || "9999-99-99") + (t.time || "99:99");
-    const sub = it ? it.deadline + "99:99" : "9999-99-99";
+    const sub = it ? it.deadline + (it.time || "99:99") : "9999-99-99";
     return main < sub ? main : sub;
   }
-  function dueText(dl) {
-    const d = daysTo(dl);
-    if (d < 0) return `quá hạn ${-d} ngày`;
-    if (d === 0) return "hạn hôm nay";
-    return `còn ${d} ngày · ${fmt(dl)}`;
+  // Mô tả hạn của việc con, có giờ nếu có
+  function dueText(i) {
+    const d = daysTo(i.deadline);
+    const at = i.time ? ` ${i.time}` : "";
+    if (d < 0) return `quá hạn ${-d} ngày · ${fmt(i.deadline)}${at}`;
+    if (d === 0) return timePassed(i) ? `quá hạn từ ${i.time} hôm nay` : `hạn hôm nay${at}`;
+    return `còn ${d} ngày · ${fmt(i.deadline)}${at}`;
   }
+  const itemLate = (i) => { const d = daysTo(i.deadline); return d < 0 || (d === 0 && timePassed(i)); };
   function whenHtml(t) {
     if (isDone(t)) return "Đã xong";
     const d = daysLeft(t);
@@ -362,8 +370,7 @@
     else main = `Còn ${d} ngày · ${fmt(t.deadline)}${at}`;
     const it = urgentItem(t);
     if (it) {
-      const late = daysTo(it.deadline) < 0;
-      main += `<span class="sub">↳ Việc con gần nhất “${esc(it.text)}”: ${late ? `<span class="late">${dueText(it.deadline)}</span>` : dueText(it.deadline)}</span>`;
+      main += `<span class="sub">↳ Việc con gần nhất “${esc(it.text)}”: ${itemLate(it) ? `<span class="late">${dueText(it)}</span>` : dueText(it)}</span>`;
     }
     return main;
   }
@@ -397,6 +404,7 @@
             deadline: next, time: t.time || "", remindBefore: remindOf(t), progress: 0,
             items: items(t).map((i) => {
               const x = { text: i.text, done: false };
+              if (i.time) x.time = i.time;
               // dời deadline việc con theo đúng khoảng cách mà việc chính được dời
               if (i.deadline && t.deadline) {
                 const d = parseYmd(i.deadline);
@@ -561,7 +569,7 @@
         ${it.length ? `<ul class="checklist">${it.map((i, n) => `
           <li class="${i.done ? "ok" : ""}" data-act="item" data-n="${n}">
             <input type="checkbox" ${i.done ? "checked" : ""} ${dis} tabindex="-1"><span>${esc(i.text)}${
-              i.deadline ? ` <span class="due ${i.done ? "" : daysTo(i.deadline) < 0 ? "late" : daysTo(i.deadline) === 0 ? "today" : ""}">📅 ${fmt(i.deadline).slice(0, 5)}</span>` : ""
+              i.deadline ? ` <span class="due ${i.done ? "" : itemLate(i) ? "late" : daysTo(i.deadline) === 0 ? "today" : ""}">📅 ${fmt(i.deadline).slice(0, 5)}${i.time ? " " + i.time : ""}</span>` : ""
             }</span>
           </li>`).join("")}</ul>` : ""}
         <div class="progress">
@@ -686,7 +694,9 @@
   }
   // Ô chọn giờ 24h (ô type="time" hiển thị SA/CH theo ngôn ngữ máy nên không dùng)
   const MINUTES = Array.from({ length: 12 }, (_, i) => pad(i * 5));
-  $("fHour").innerHTML = `<option value="">--</option>` + Array.from({ length: 24 }, (_, h) => `<option>${pad(h)}</option>`).join("");
+  const HOUR_OPTS = `<option value="">--</option>` + Array.from({ length: 24 }, (_, h) => `<option>${pad(h)}</option>`).join("");
+  const minuteOpts = (m) => (m && !MINUTES.includes(m) ? [...MINUTES, m].sort() : MINUTES).map((x) => `<option>${x}</option>`).join("");
+  $("fHour").innerHTML = HOUR_OPTS;
   function setTime(v) {
     const [h, m] = v ? v.split(":") : ["", ""];
     const mins = m && !MINUTES.includes(m) ? [...MINUTES, m].sort() : MINUTES;
@@ -729,7 +739,13 @@
       <input type="checkbox" class="i-done" ${i.done ? "checked" : ""} aria-label="Đã xong">
       <input class="i-text" maxlength="200" placeholder="Tên việc con" value="${esc(i.text || "")}">
       <input class="i-date" type="date" value="${esc(i.deadline || "")}" aria-label="Deadline việc con">
+      <div class="i-time"><select class="i-h" aria-label="Giờ việc con">${HOUR_OPTS}</select><b>:</b><select class="i-m" aria-label="Phút việc con"></select></div>
       <button type="button" class="i-del" aria-label="Xóa việc con">✕</button>`;
+    const [h, m] = i.time ? i.time.split(":") : ["", ""];
+    row.querySelector(".i-m").innerHTML = minuteOpts(m);
+    row.querySelector(".i-h").value = h || "";
+    row.querySelector(".i-m").value = m || "00";
+    row.querySelector(".i-m").disabled = !h;
     after ? after.after(row) : $("fItems").append(row);
     return row;
   }
@@ -738,7 +754,9 @@
       .map((r) => {
         const x = { text: r.querySelector(".i-text").value.trim(), done: r.querySelector(".i-done").checked };
         const d = r.querySelector(".i-date").value;
+        const h = r.querySelector(".i-h").value;
         if (d) x.deadline = d;
+        if (d && h) x.time = `${h}:${r.querySelector(".i-m").value}`;
         return x;
       })
       .filter((x) => x.text);
@@ -748,7 +766,10 @@
     if (e.target.closest(".i-del")) { e.target.closest(".item-row").remove(); syncProgressField(); }
   });
   $("fItems").addEventListener("input", syncProgressField);
-  $("fItems").addEventListener("change", syncProgressField);
+  $("fItems").addEventListener("change", (e) => {
+    if (e.target.classList.contains("i-h")) e.target.closest(".i-time").querySelector(".i-m").disabled = !e.target.value;
+    syncProgressField();
+  });
   $("fItems").addEventListener("keydown", (e) => {
     if (e.key !== "Enter" || !e.target.classList.contains("i-text")) return;
     e.preventDefault();

@@ -116,7 +116,7 @@ def status_at(dl, tm, remind, now):
 def urgent_item(t):
     """Việc con chưa xong có deadline sớm nhất."""
     cands = [i for i in items(t) if not i.get("done") and days_left(i, date.today()) is not None]
-    return min(cands, key=lambda i: i["deadline"]) if cands else None
+    return min(cands, key=lambda i: i["deadline"] + (i.get("time") or "99:99")) if cands else None
 
 
 def status_of(t, now):
@@ -126,7 +126,7 @@ def status_of(t, now):
     s = status_at(t.get("deadline"), parse_time(t), remind_of(t), now)
     it = urgent_item(t)
     if it:
-        si = status_at(it["deadline"], None, remind_of(t), now)
+        si = status_at(it["deadline"], parse_time(it), remind_of(t), now)
         if STATUS_RANK[si] < STATUS_RANK[s]:
             s = si
     return s
@@ -135,7 +135,7 @@ def status_of(t, now):
 def eff_deadline(t):
     main = (t.get("deadline") or "9999-99-99") + (t.get("time") or "99:99")
     it = urgent_item(t)
-    sub = it["deadline"] + "99:99" if it else "9999-99-99"
+    sub = it["deadline"] + (it.get("time") or "99:99") if it else "9999-99-99"
     return min(main, sub)
 
 
@@ -163,13 +163,21 @@ def fmt_date(s):
         return ""
 
 
-def due_text(dl, today):
-    d = days_left({"deadline": dl}, today)
+def item_late(i, now):
+    d = days_left(i, now.date())
+    tm = parse_time(i)
+    return d is not None and (d < 0 or (d == 0 and tm is not None and now.time() > tm))
+
+
+def due_text(i, now):
+    d = days_left(i, now.date())
+    tm = parse_time(i)
+    at = f" {i['time']}" if tm else ""
     if d < 0:
-        return f"quá hạn {-d} ngày"
+        return f"quá hạn {-d} ngày · {fmt_date(i['deadline'])}{at}"
     if d == 0:
-        return "hạn hôm nay"
-    return f"còn {d} ngày · {fmt_date(dl)}"
+        return f"quá hạn từ {i['time']} hôm nay" if tm and now.time() > tm else f"hạn hôm nay{at}"
+    return f"còn {d} ngày · {fmt_date(i['deadline'])}{at}"
 
 
 def when_text(t, now):
@@ -186,8 +194,8 @@ def when_text(t, now):
         text = f"Còn {d} ngày · {fmt_date(t['deadline'])}{at}"
     it = urgent_item(t)
     if it:
-        late = days_left(it, now.date()) < 0
-        sub = due_text(it["deadline"], now.date())
+        late = item_late(it, now)
+        sub = due_text(it, now)
         text += (
             f'<br>↳ Việc con gần nhất “{html.escape(it.get("text", ""))}”: '
             + (f'<b style="color:#dc2626">{sub}</b>' if late else sub)
@@ -241,8 +249,9 @@ def task_html(t, now, site_url):
             if not i.get("deadline") or days_left(i, now.date()) is None:
                 return ""
             d = days_left(i, now.date())
-            color = "#9ca3af" if i.get("done") else "#dc2626" if d < 0 else "#ea580c" if d == 0 else "#6b7280"
-            return f' <span style="color:{color};font-size:12px">📅 {fmt_date(i["deadline"])[:5]}</span>'
+            color = "#9ca3af" if i.get("done") else "#dc2626" if item_late(i, now) else "#ea580c" if d == 0 else "#6b7280"
+            at = f" {i['time']}" if parse_time(i) else ""
+            return f' <span style="color:{color};font-size:12px">📅 {fmt_date(i["deadline"])[:5]}{at}</span>'
 
         lines = "".join(
             f'<div style="font-size:13px;color:{"#9ca3af" if i.get("done") else "#333"}">'
