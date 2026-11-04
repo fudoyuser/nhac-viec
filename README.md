@@ -55,7 +55,7 @@ Actions → *Gửi mail nhắc việc* → Run workflow → chọn loại mail (
 - **"Nhắc gấp trước (ngày)"** của từng việc: khi còn ≤ số ngày này, việc được đưa lên mục *Sắp đến hạn*.
 - **Loại mail theo giờ**: sửa hàm `pick_mode` trong `scripts/send_reminder.py`.
 - Việc có tiến độ 100% được coi là xong và không còn được nhắc.
-- **Nhóm**: gõ tên nhóm khi thêm việc (Công ty, Cá nhân…). Website có thanh chọn nhóm, email gắn nhãn nhóm cho từng việc.
+- **Nhóm**: bấm 🗂 Nhóm để tạo, đổi tên, xóa nhóm. Khi thêm việc, chọn nhóm từ danh sách (website tự chọn sẵn nhóm dùng lần trước) hoặc chọn “+ Tạo nhóm mới…”.
 
 ## Lưu ý
 - Ai có link website cũng xem và sửa được danh sách việc. Đừng chia sẻ link và đừng ghi thông tin nhạy cảm.

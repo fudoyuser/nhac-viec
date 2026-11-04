@@ -43,7 +43,9 @@ def load_tasks():
         print(f"Chưa có file {TASKS_FILE} (chưa thêm việc nào trên website).")
         return []
     with open(TASKS_FILE, encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+    # Dữ liệu cũ là một mảng việc; dữ liệu mới là {"groups": [...], "tasks": [...]}
+    return data if isinstance(data, list) else data.get("tasks", [])
 
 
 def items(t):

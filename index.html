@@ -22,7 +22,9 @@
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   .wrap { max-width: 760px; margin: 0 auto; padding: 20px 16px 60px; }
   header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-  h1 { margin: 0; font-size: 24px; }
+  h1 { margin: 0; font-size: 24px; white-space: nowrap; }
+  header button { white-space: nowrap; }
+  @media (max-width: 520px) { h1 { font-size: 20px; } header button { padding: 7px 10px; } }
   button, select { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 7px 12px; border-radius: 8px; cursor: pointer; }
   button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
   button.danger { color: var(--red); }
@@ -85,6 +87,9 @@
   .ghead b { font-size: 16px; }
   .ghead span { font-size: 13px; color: var(--muted); }
   small.help { color: var(--muted); font-size: 12px; }
+  .gm-row { display: flex; justify-content: space-between; align-items: center; gap: 6px 8px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .gm-row:last-child { border-bottom: 0; }
+  .gm-row span { color: var(--muted); font-size: 13px; margin-left: 6px; }
   /* Lịch */
   .cal-head { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
   .cal-head b { font-size: 17px; }
@@ -113,7 +118,10 @@
 <div class="wrap">
   <header>
     <h1>📋 Nhắc việc</h1>
-    <button class="primary" id="btnAdd">+ Thêm việc</button>
+    <div style="display:flex;gap:6px">
+      <button id="btnGroups">🗂 Nhóm</button>
+      <button class="primary" id="btnAdd">+ Thêm việc</button>
+    </div>
   </header>
 
   <div id="msg" class="msg"></div>
@@ -125,8 +133,8 @@
     <div class="grid2">
       <div>
         <label>Nhóm</label>
-        <input id="fGroup" maxlength="50" list="groupList" placeholder="Công ty, Cá nhân…">
-        <datalist id="groupList"></datalist>
+        <select id="fGroupSel"></select>
+        <input id="fGroupNew" class="hidden" maxlength="50" placeholder="Tên nhóm mới" style="margin-top:6px">
       </div>
       <div>
         <label>Ưu tiên</label>
@@ -166,6 +174,15 @@
       <button id="fCancel">Hủy</button>
       <button class="primary" id="fSave">Lưu</button>
     </div>
+  </div>
+
+  <div id="groupMgr" class="card hidden">
+    <div class="row"><b>Nhóm công việc</b><button class="sm" id="gmClose">Đóng</button></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <input id="gmNew" maxlength="50" placeholder="Tên nhóm mới, ví dụ: Agriup">
+      <button class="primary" id="gmAdd" style="white-space:nowrap">+ Thêm</button>
+    </div>
+    <div id="gmList"></div>
   </div>
 
   <div class="chips groups" id="groups"></div>
@@ -217,6 +234,7 @@
   };
 
   let tasks = [];
+  let groups = []; // danh sách nhóm đã tạo (kể cả nhóm chưa có việc nào)
   let sha = null;
   let editingId = null;
   let saving = false;
@@ -337,15 +355,18 @@
 
   async function fetchRemote() {
     const r = await fetch(apiUrl() + "?t=" + Date.now(), { headers: headers(), cache: "no-store" });
-    if (r.status === 404) { tasks = []; sha = null; return; }
+    if (r.status === 404) { tasks = []; groups = []; sha = null; return; }
     if (!r.ok) throw new Error("GitHub API " + r.status);
     const j = await r.json();
     sha = j.sha;
-    tasks = JSON.parse(b64decode(j.content));
+    const data = JSON.parse(b64decode(j.content));
+    // Dữ liệu cũ là một mảng việc; dữ liệu mới là { groups, tasks }
+    tasks = Array.isArray(data) ? data : data.tasks || [];
+    groups = Array.isArray(data) ? [] : data.groups || [];
   }
 
   async function put(label) {
-    const body = { message: label, content: b64encode(JSON.stringify(tasks, null, 2) + "\n"), ...(sha ? { sha } : {}) };
+    const body = { message: label, content: b64encode(JSON.stringify({ groups, tasks }, null, 2) + "\n"), ...(sha ? { sha } : {}) };
     const r = await fetch(apiUrl(), { method: "PUT", headers: { ...headers(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (r.status === 409 || r.status === 422) return "conflict";
     if (!r.ok) throw new Error("GitHub API " + r.status + " " + ((await r.json().catch(() => ({}))).message || ""));
@@ -358,21 +379,21 @@
   async function mutate(fn, label, okText = "Đã lưu ✓") {
     if (!configured) { msg("Website chưa được cấu hình nên không lưu được.", "err"); return false; }
     if (saving) return false;
-    const backup = JSON.stringify(tasks);
+    const backup = JSON.stringify({ groups, tasks });
     saving = true;
-    fn(tasks); finalize(tasks); render();
+    fn(tasks, groups); finalize(tasks); render();
     try {
       let res = await put(label);
       if (res === "conflict") {
         await fetchRemote();
-        fn(tasks); finalize(tasks); render();
+        fn(tasks, groups); finalize(tasks); render();
         res = await put(label);
         if (res === "conflict") throw new Error("dữ liệu đang được sửa ở nơi khác, thử lại sau ít giây");
       }
       if (okText) msg(okText);
       return true;
     } catch (e) {
-      try { await fetchRemote(); } catch { tasks = JSON.parse(backup); }
+      try { await fetchRemote(); } catch { ({ groups, tasks } = JSON.parse(backup)); }
       msg("Chưa lưu được: " + e.message + ". Màn hình đã trở về dữ liệu đã lưu.", "err");
       return false;
     } finally {
@@ -385,7 +406,7 @@
 
   // ---------- Hiển thị ----------
   function groupNames() {
-    const names = [...new Set(tasks.map(groupOf))];
+    const names = [...new Set([...groups, ...tasks.map(groupOf)])];
     return names.sort((a, b) => (a === NO_GROUP) - (b === NO_GROUP) || a.localeCompare(b, "vi"));
   }
   const openCount = (list) => list.filter((t) => !isDone(t)).length;
@@ -418,7 +439,28 @@
       names.length > 1 || (names.length === 1 && names[0] !== NO_GROUP)
         ? chip("*", "Tất cả nhóm", openCount(tasks)) + names.map((g) => chip(g, g, openCount(tasks.filter((t) => groupOf(t) === g)))).join("")
         : "";
-    $("groupList").innerHTML = names.filter((g) => g !== NO_GROUP).map((g) => `<option value="${esc(g)}">`).join("");
+    renderGroupManager(names);
+  }
+
+  const realGroups = () => groupNames().filter((g) => g !== NO_GROUP);
+
+  function renderGroupManager(names) {
+    if ($("groupMgr").classList.contains("hidden")) return;
+    const list = names.filter((g) => g !== NO_GROUP);
+    const dis = saving ? "disabled" : "";
+    $("gmList").innerHTML = list.length
+      ? list.map((g) => {
+          const n = tasks.filter((t) => groupOf(t) === g);
+          return `<div class="gm-row" data-name="${esc(g)}">
+            <div><b>${esc(g)}</b><span>${n.length} việc${openCount(n) ? ` · ${openCount(n)} chưa xong` : ""}</span></div>
+            <div class="actions">
+              <button class="sm" data-gm="new" ${dis}>+ Việc</button>
+              <button class="sm" data-gm="rename" ${dis}>Đổi tên</button>
+              <button class="sm danger" data-gm="del" ${dis}>Xóa</button>
+            </div>
+          </div>`;
+        }).join("")
+      : `<div class="empty" style="padding:16px 0">Chưa có nhóm nào. Gõ tên nhóm ở trên rồi bấm “+ Thêm”.</div>`;
   }
 
   function card(t, showGroup) {
@@ -556,7 +598,7 @@
     editingId = t ? t.id : null;
     $("formTitle").textContent = t ? "Sửa việc" : "Thêm việc";
     $("fTitle").value = t?.title || "";
-    $("fGroup").value = t ? t.group || "" : group !== "*" && group !== NO_GROUP ? group : "";
+    fillGroupSelect(t ? t.group || "" : defaultGroup());
     $("fPriority").value = t ? prioOf(t) : "normal";
     $("fDeadline").value = t?.deadline || (view === "cal" && calSel ? calSel : "");
     $("fTime").value = t?.time || "";
@@ -570,6 +612,29 @@
     $("form").scrollIntoView({ behavior: "smooth", block: "start" });
     $("fTitle").focus({ preventScroll: true });
   }
+  // Nhóm mặc định khi thêm việc: nhóm đang lọc, nếu không thì nhóm dùng lần trước
+  function defaultGroup() {
+    if (group !== "*" && group !== NO_GROUP) return group;
+    const last = pref.get("lastGroup", "");
+    return realGroups().includes(last) ? last : "";
+  }
+  function fillGroupSelect(value) {
+    const list = realGroups();
+    if (value && !list.includes(value)) list.push(value);
+    $("fGroupSel").innerHTML =
+      `<option value="">— Không có nhóm —</option>` +
+      list.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("") +
+      `<option value="__new__">+ Tạo nhóm mới…</option>`;
+    $("fGroupSel").value = value || "";
+    $("fGroupNew").value = "";
+    $("fGroupNew").classList.add("hidden");
+  }
+  $("fGroupSel").onchange = () => {
+    const isNew = $("fGroupSel").value === "__new__";
+    $("fGroupNew").classList.toggle("hidden", !isNew);
+    if (isNew) $("fGroupNew").focus();
+  };
+
   function parseItems(text) {
     return text.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
       const m = l.match(/^\[(x|X| )?\]\s*/);
@@ -592,9 +657,11 @@
   $("fSave").onclick = async () => {
     const title = $("fTitle").value.trim();
     if (!title) return msg("Nhập tên công việc", "err");
+    const groupVal = $("fGroupSel").value === "__new__" ? $("fGroupNew").value.trim() : $("fGroupSel").value;
+    if ($("fGroupSel").value === "__new__" && !groupVal) return msg("Nhập tên nhóm mới", "err");
     const data = {
       title,
-      group: $("fGroup").value.trim(),
+      group: groupVal,
       priority: $("fPriority").value,
       deadline: $("fDeadline").value,
       time: $("fDeadline").value ? $("fTime").value : "",
@@ -608,7 +675,9 @@
     const id = editingId || uid();
     const isNew = !editingId;
     $("form").classList.add("hidden");
-    await mutate((list) => {
+    if (groupVal) pref.set("lastGroup", groupVal);
+    await mutate((list, gs) => {
+      if (groupVal && !gs.includes(groupVal)) gs.push(groupVal);
       const t = byId(list, id);
       if (t) Object.assign(t, data);
       else list.push({ id, createdAt: new Date().toISOString(), ...data });
@@ -637,6 +706,61 @@
     if (step) return mutate((list) => { const x = byId(list, id); if (x) x.progress = Math.max(0, Math.min(100, (+x.progress || 0) + step)); }, `Tiến độ: ${t.title}`);
     if (act === "done") return mutate((list) => { const x = byId(list, id); if (x) x.progress = 100; }, "Xong: " + t.title, t.repeat ? "Đã xong ✓ Đã tạo kỳ tiếp theo" : "Đã xong ✓");
     if (act === "reopen") return mutate((list) => { const x = byId(list, id); if (x) x.progress = 0; }, "Mở lại: " + t.title);
+  });
+
+  // ---------- Quản lý nhóm ----------
+  $("btnGroups").onclick = () => {
+    $("groupMgr").classList.toggle("hidden");
+    render();
+    if (!$("groupMgr").classList.contains("hidden")) $("gmNew").focus();
+  };
+  $("gmClose").onclick = () => $("groupMgr").classList.add("hidden");
+  async function addGroup() {
+    const name = $("gmNew").value.trim();
+    if (!name) return msg("Nhập tên nhóm", "err");
+    if (name === NO_GROUP) return msg("Tên này đã được dùng sẵn, chọn tên khác", "err");
+    if (realGroups().includes(name)) return msg(`Đã có nhóm “${name}”`, "err");
+    $("gmNew").value = "";
+    pref.set("lastGroup", name);
+    await mutate((list, gs) => { if (!gs.includes(name)) gs.push(name); }, "Thêm nhóm: " + name, `Đã tạo nhóm “${name}” ✓`);
+  }
+  $("gmAdd").onclick = addGroup;
+  $("gmNew").addEventListener("keydown", (e) => { if (e.key === "Enter") addGroup(); });
+  $("gmList").addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-gm]");
+    if (!b || saving) return;
+    const name = b.closest(".gm-row").dataset.name;
+    const act = b.dataset.gm;
+    if (act === "new") {
+      $("groupMgr").classList.add("hidden");
+      openForm(null);
+      fillGroupSelect(name);
+      return;
+    }
+    if (act === "rename") {
+      const to = (prompt(`Đổi tên nhóm “${name}” thành:`, name) || "").trim();
+      if (!to || to === name) return;
+      if (to === NO_GROUP) return msg("Tên này đã được dùng sẵn, chọn tên khác", "err");
+      const merge = realGroups().includes(to);
+      if (merge && !confirm(`Đã có nhóm “${to}”. Gộp toàn bộ việc của “${name}” vào “${to}”?`)) return;
+      if (group === name) { group = to; pref.set("group", to); }
+      if (pref.get("lastGroup", "") === name) pref.set("lastGroup", to);
+      return mutate((list, gs) => {
+        list.forEach((t) => { if ((t.group || "").trim() === name) t.group = to; });
+        const i = gs.indexOf(name);
+        if (i >= 0) gs.splice(i, 1);
+        if (!gs.includes(to)) gs.push(to);
+      }, `Đổi tên nhóm: ${name} → ${to}`, merge ? `Đã gộp vào “${to}” ✓` : `Đã đổi tên thành “${to}” ✓`);
+    }
+    if (act === "del") {
+      const n = tasks.filter((t) => groupOf(t) === name).length;
+      if (!confirm(`Xóa nhóm “${name}”?${n ? `\n${n} việc trong nhóm sẽ chuyển sang “${NO_GROUP}” (không bị xóa).` : ""}`)) return;
+      return mutate((list, gs) => {
+        list.forEach((t) => { if ((t.group || "").trim() === name) t.group = ""; });
+        const i = gs.indexOf(name);
+        if (i >= 0) gs.splice(i, 1);
+      }, "Xóa nhóm: " + name, `Đã xóa nhóm “${name}” ✓`);
+    }
   });
 
   // ---------- Bộ lọc, tìm kiếm, chế độ xem ----------
