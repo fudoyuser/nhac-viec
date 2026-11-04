@@ -62,6 +62,17 @@
   .checklist li { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; font-size: 14px; cursor: pointer; }
   .checklist input { width: 18px; height: 18px; margin: 2px 0 0; flex-shrink: 0; cursor: pointer; }
   .checklist li.ok span { text-decoration: line-through; color: var(--muted); }
+  .checklist .due { font-size: 12px; color: var(--muted); white-space: nowrap; margin-left: 2px; }
+  .checklist .due.late { color: var(--red); font-weight: 600; }
+  .checklist .due.today { color: var(--orange); font-weight: 600; }
+  .meta .sub { display: block; }
+  .item-row { display: grid; grid-template-columns: 22px 1fr 150px 34px; gap: 6px; align-items: center; margin-top: 6px; }
+  .item-row input[type=checkbox] { width: 18px; height: 18px; margin: 0; }
+  .item-row button { padding: 6px 0; }
+  @media (max-width: 520px) {
+    .item-row { grid-template-columns: 22px 1fr 34px; }
+    .item-row .i-date { grid-column: 2 / 3; grid-row: 2; }
+  }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
   .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 12px; }
   @media (max-width: 520px) { .grid2, .grid3 { grid-template-columns: 1fr 1fr; } }
@@ -166,13 +177,14 @@
     <div class="grid2">
       <div><label>Nhắc gấp trước (ngày)</label><input id="fRemind" type="number" min="0" max="60" value="3"></div>
       <div>
-        <label>Tiến độ: <span id="fProgVal">0</span>%</label>
+        <label>Tiến độ: <span id="fProgVal">0%</span></label>
         <input id="fProgress" type="range" min="0" max="100" step="5" value="0" style="padding:0;margin-top:8px">
       </div>
     </div>
-    <label>Việc con (mỗi dòng một mục, không bắt buộc)</label>
-    <textarea id="fItems" rows="3" placeholder="Thu thập số liệu&#10;Viết bản nháp&#10;Gửi sếp duyệt"></textarea>
-    <small class="help">Khi có việc con, tiến độ tự tính theo số mục đã tích. Ghi “[x] ” ở đầu dòng để đánh dấu đã xong.</small>
+    <label>Việc con (không bắt buộc)</label>
+    <div id="fItems"></div>
+    <button class="sm" id="fItemAdd" type="button" style="margin-top:8px">+ Thêm việc con</button>
+    <small class="help" style="display:block;margin-top:4px">Mỗi việc con có thể có deadline riêng. Khi có việc con, tiến độ tự tính theo số mục đã tích. Nhấn Enter ở ô tên để thêm dòng mới.</small>
     <label>Ghi chú</label>
     <textarea id="fNote" rows="2"></textarea>
     <div class="bar">
@@ -289,33 +301,71 @@
   }
   const groupOf = (t) => (t.group || "").trim() || NO_GROUP;
   const prioOf = (t) => (t.priority in PRIO_RANK ? t.priority : "normal");
-  function daysLeft(t) {
-    if (!t.deadline) return null;
-    return Math.round((parseYmd(t.deadline) - parseYmd(todayStr())) / 86400000);
-  }
+  const daysTo = (dl) => (dl ? Math.round((parseYmd(dl) - parseYmd(todayStr())) / 86400000) : null);
+  const daysLeft = (t) => daysTo(t.deadline);
   function timePassed(t) {
     if (!t.time) return false;
     const [h, m] = t.time.split(":").map(Number);
     const now = new Date();
     return now.getHours() * 60 + now.getMinutes() > h * 60 + m;
   }
-  function statusOf(t) {
-    if (isDone(t)) return "done";
-    const d = daysLeft(t);
+  // Mức gấp của một mốc deadline (dùng cho việc chính và từng việc con)
+  function statusAt(dl, time, remind) {
+    const d = daysTo(dl);
     if (d === null) return "later";
     if (d < 0) return "overdue";
-    if (d === 0) return timePassed(t) ? "overdue" : "today";
-    if (d <= remindOf(t)) return "soon";
+    if (d === 0) return timePassed({ time }) ? "overdue" : "today";
+    if (d <= remind) return "soon";
     return "later";
+  }
+  // Việc con chưa xong có deadline gấp nhất (hoặc null)
+  function urgentItem(t) {
+    let best = null;
+    items(t).forEach((i) => {
+      if (i.done || !i.deadline) return;
+      if (!best || i.deadline < best.deadline) best = i;
+    });
+    return best;
+  }
+  // Mức gấp của cả việc = mức gấp nhất giữa deadline chính và deadline các việc con chưa xong
+  function statusOf(t) {
+    if (isDone(t)) return "done";
+    let s = statusAt(t.deadline, t.time, remindOf(t));
+    const it = urgentItem(t);
+    if (it) {
+      const si = statusAt(it.deadline, "", remindOf(t));
+      if (STATUS_RANK[si] < STATUS_RANK[s]) s = si;
+    }
+    return s;
+  }
+  // Ngày dùng để sắp xếp: sớm nhất giữa deadline chính và deadline việc con chưa xong
+  function effDeadline(t) {
+    const it = urgentItem(t);
+    const main = (t.deadline || "9999-99-99") + (t.time || "99:99");
+    const sub = it ? it.deadline + "99:99" : "9999-99-99";
+    return main < sub ? main : sub;
+  }
+  function dueText(dl) {
+    const d = daysTo(dl);
+    if (d < 0) return `quá hạn ${-d} ngày`;
+    if (d === 0) return "hạn hôm nay";
+    return `còn ${d} ngày · ${fmt(dl)}`;
   }
   function whenHtml(t) {
     if (isDone(t)) return "Đã xong";
     const d = daysLeft(t);
-    if (d === null) return "Không có deadline";
     const at = t.time ? ` ${t.time}` : "";
-    if (d < 0) return `<span class="late">Quá hạn ${-d} ngày</span> · ${fmt(t.deadline)}${at}`;
-    if (d === 0) return timePassed(t) ? `<span class="late">Quá hạn từ ${t.time} hôm nay</span>` : `Hạn hôm nay${at}`;
-    return `Còn ${d} ngày · ${fmt(t.deadline)}${at}`;
+    let main;
+    if (d === null) main = "Không có deadline";
+    else if (d < 0) main = `<span class="late">Quá hạn ${-d} ngày</span> · ${fmt(t.deadline)}${at}`;
+    else if (d === 0) main = timePassed(t) ? `<span class="late">Quá hạn từ ${t.time} hôm nay</span>` : `Hạn hôm nay${at}`;
+    else main = `Còn ${d} ngày · ${fmt(t.deadline)}${at}`;
+    const it = urgentItem(t);
+    if (it) {
+      const late = daysTo(it.deadline) < 0;
+      main += `<span class="sub">↳ Việc con gần nhất “${esc(it.text)}”: ${late ? `<span class="late">${dueText(it.deadline)}</span>` : dueText(it.deadline)}</span>`;
+    }
+    return main;
   }
 
   function addPeriod(s, repeat) {
@@ -345,7 +395,17 @@
           list.push({
             id: uid(), title: t.title, group: t.group || "", priority: prioOf(t), repeat: t.repeat,
             deadline: next, time: t.time || "", remindBefore: remindOf(t), progress: 0,
-            items: items(t).map((i) => ({ text: i.text, done: false })), note: t.note || "", createdAt: now,
+            items: items(t).map((i) => {
+              const x = { text: i.text, done: false };
+              // dời deadline việc con theo đúng khoảng cách mà việc chính được dời
+              if (i.deadline && t.deadline) {
+                const d = parseYmd(i.deadline);
+                d.setDate(d.getDate() + Math.round((parseYmd(next) - parseYmd(t.deadline)) / 86400000));
+                x.deadline = ymd(d);
+              }
+              return x;
+            }),
+            note: t.note || "", createdAt: now,
           });
         }
       } else {
@@ -423,7 +483,7 @@
   }
 
   function compare(a, b) {
-    const dl = (t) => (t.deadline || "9999-99-99") + (t.time || "99:99");
+    const dl = effDeadline;
     const urgent = () => STATUS_RANK[statusOf(a)] - STATUS_RANK[statusOf(b)];
     const prio = () => PRIO_RANK[prioOf(a)] - PRIO_RANK[prioOf(b)];
     const date = () => dl(a).localeCompare(dl(b));
@@ -500,7 +560,9 @@
         ${t.note ? `<div class="note">${esc(t.note)}</div>` : ""}
         ${it.length ? `<ul class="checklist">${it.map((i, n) => `
           <li class="${i.done ? "ok" : ""}" data-act="item" data-n="${n}">
-            <input type="checkbox" ${i.done ? "checked" : ""} ${dis} tabindex="-1"><span>${esc(i.text)}</span>
+            <input type="checkbox" ${i.done ? "checked" : ""} ${dis} tabindex="-1"><span>${esc(i.text)}${
+              i.deadline ? ` <span class="due ${i.done ? "" : daysTo(i.deadline) < 0 ? "late" : daysTo(i.deadline) === 0 ? "today" : ""}">📅 ${fmt(i.deadline).slice(0, 5)}</span>` : ""
+            }</span>
           </li>`).join("")}</ul>` : ""}
         <div class="progress">
           <div class="pbar"><i style="width:${p}%;background:${p >= 100 ? "var(--green)" : "var(--primary)"}"></i></div>
@@ -563,7 +625,11 @@
     const start = new Date(y, m, 1);
     start.setDate(1 - ((start.getDay() + 6) % 7)); // bắt đầu từ thứ Hai
     const byDay = {};
-    base.filter((t) => t.deadline).forEach((t) => (byDay[t.deadline] ||= []).push(t));
+    const put = (day, t) => { const l = (byDay[day] ||= []); if (!l.includes(t)) l.push(t); };
+    base.forEach((t) => {
+      if (t.deadline) put(t.deadline, t);
+      items(t).forEach((i) => { if (i.deadline && !i.done) put(i.deadline, t); });
+    });
     Object.values(byDay).forEach((l) => l.sort(compare));
     const today = todayStr();
     let cells = "";
@@ -591,7 +657,7 @@
 
     const sel = calSel || today;
     const dayList = (byDay[sel] || []).slice();
-    const noDl = base.filter((t) => !t.deadline && !isDone(t));
+    const noDl = base.filter((t) => !t.deadline && !urgentItem(t) && !isDone(t));
     $("list").innerHTML =
       `<div class="ghead"><b>${sel === today ? "Hôm nay" : "Ngày " + fmt(sel)}</b><span>${dayList.length} việc</span></div>` +
       (dayList.length ? dayList.map((t) => card(t, true)).join("") : `<div class="empty">Không có việc nào hết hạn ngày này.</div>`) +
@@ -610,7 +676,8 @@
     $("fRepeat").value = t?.repeat || "";
     $("fRemind").value = t ? remindOf(t) : 3;
     $("fProgress").value = t ? +t.progress || 0 : 0;
-    $("fItems").value = t ? items(t).map((i) => (i.done ? "[x] " : "") + i.text).join("\n") : "";
+    $("fItems").innerHTML = "";
+    (t ? items(t) : []).forEach((i) => addItemRow(i));
     $("fNote").value = t?.note || "";
     syncProgressField();
     $("form").classList.remove("hidden");
@@ -654,25 +721,63 @@
     if (isNew) $("fGroupNew").focus();
   };
 
-  function parseItems(text) {
-    return text.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
-      const m = l.match(/^\[(x|X| )?\]\s*/);
-      return { text: m ? l.slice(m[0].length) : l, done: !!(m && /x/i.test(m[1] || "")) };
-    }).filter((i) => i.text);
+  // Danh sách việc con trong form: mỗi dòng có ô tích, tên, deadline, nút xóa
+  function addItemRow(i = {}, after = null) {
+    const row = document.createElement("div");
+    row.className = "item-row";
+    row.innerHTML = `
+      <input type="checkbox" class="i-done" ${i.done ? "checked" : ""} aria-label="Đã xong">
+      <input class="i-text" maxlength="200" placeholder="Tên việc con" value="${esc(i.text || "")}">
+      <input class="i-date" type="date" value="${esc(i.deadline || "")}" aria-label="Deadline việc con">
+      <button type="button" class="i-del" aria-label="Xóa việc con">✕</button>`;
+    after ? after.after(row) : $("fItems").append(row);
+    return row;
   }
+  function readItems() {
+    return [...$("fItems").querySelectorAll(".item-row")]
+      .map((r) => {
+        const x = { text: r.querySelector(".i-text").value.trim(), done: r.querySelector(".i-done").checked };
+        const d = r.querySelector(".i-date").value;
+        if (d) x.deadline = d;
+        return x;
+      })
+      .filter((x) => x.text);
+  }
+  $("fItemAdd").onclick = () => { addItemRow().querySelector(".i-text").focus(); syncProgressField(); };
+  $("fItems").addEventListener("click", (e) => {
+    if (e.target.closest(".i-del")) { e.target.closest(".item-row").remove(); syncProgressField(); }
+  });
+  $("fItems").addEventListener("input", syncProgressField);
+  $("fItems").addEventListener("change", syncProgressField);
+  $("fItems").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || !e.target.classList.contains("i-text")) return;
+    e.preventDefault();
+    addItemRow({}, e.target.closest(".item-row")).querySelector(".i-text").focus();
+  });
+  // Dán nhiều dòng vào ô tên: mỗi dòng thành một việc con
+  $("fItems").addEventListener("paste", (e) => {
+    if (!e.target.classList.contains("i-text")) return;
+    const lines = (e.clipboardData?.getData("text") || "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length < 2) return;
+    e.preventDefault();
+    let row = e.target.closest(".item-row");
+    e.target.value = (e.target.value + lines[0]).trim();
+    lines.slice(1).forEach((l) => (row = addItemRow({ text: l }, row)));
+    syncProgressField();
+  });
+
   function syncProgressField() {
-    const it = parseItems($("fItems").value);
+    const it = readItems();
     const auto = it.length > 0;
     $("fProgress").disabled = auto;
     $("fProgVal").textContent = auto
-      ? Math.round((it.filter((i) => i.done).length / it.length) * 100) + " (tự tính)"
-      : $("fProgress").value;
+      ? Math.round((it.filter((i) => i.done).length / it.length) * 100) + "% (tự tính theo việc con)"
+      : $("fProgress").value + "%";
   }
 
   $("btnAdd").onclick = () => openForm(null);
   $("fCancel").onclick = () => $("form").classList.add("hidden");
   $("fProgress").oninput = syncProgressField;
-  $("fItems").oninput = syncProgressField;
   $("fSave").onclick = async () => {
     const title = $("fTitle").value.trim();
     if (!title) return msg("Nhập tên công việc", "err");
@@ -687,7 +792,7 @@
       repeat: $("fRepeat").value,
       remindBefore: Math.max(0, parseInt($("fRemind").value, 10) || 0),
       progress: +$("fProgress").value,
-      items: parseItems($("fItems").value),
+      items: readItems(),
       note: $("fNote").value.trim(),
     };
     if (data.repeat && !data.deadline) return msg("Việc lặp lại cần có deadline", "err");

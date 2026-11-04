@@ -96,24 +96,51 @@ def days_left(t, today):
         return None
 
 
-def status_of(t, now):
-    if is_done(t):
-        return "done"
-    d = days_left(t, now.date())
+STATUS_RANK = {"overdue": 0, "today": 1, "soon": 2, "later": 3, "done": 4}
+
+
+def status_at(dl, tm, remind, now):
+    """Mức gấp của một mốc deadline (việc chính hoặc việc con)."""
+    d = days_left({"deadline": dl}, now.date())
     if d is None:
         return "later"
     if d < 0:
         return "overdue"
     if d == 0:
-        tm = parse_time(t)
         return "overdue" if tm and now.time() > tm else "today"
-    if d <= remind_of(t):
+    if d <= remind:
         return "soon"
     return "later"
 
 
+def urgent_item(t):
+    """Việc con chưa xong có deadline sớm nhất."""
+    cands = [i for i in items(t) if not i.get("done") and days_left(i, date.today()) is not None]
+    return min(cands, key=lambda i: i["deadline"]) if cands else None
+
+
+def status_of(t, now):
+    """Mức gấp của cả việc = gấp nhất giữa deadline chính và deadline các việc con chưa xong."""
+    if is_done(t):
+        return "done"
+    s = status_at(t.get("deadline"), parse_time(t), remind_of(t), now)
+    it = urgent_item(t)
+    if it:
+        si = status_at(it["deadline"], None, remind_of(t), now)
+        if STATUS_RANK[si] < STATUS_RANK[s]:
+            s = si
+    return s
+
+
+def eff_deadline(t):
+    main = (t.get("deadline") or "9999-99-99") + (t.get("time") or "99:99")
+    it = urgent_item(t)
+    sub = it["deadline"] + "99:99" if it else "9999-99-99"
+    return min(main, sub)
+
+
 def sort_key(t):
-    return (PRIO_RANK[prio_of(t)], t.get("deadline") or "9999-99-99", t.get("time") or "99:99")
+    return (PRIO_RANK[prio_of(t)], eff_deadline(t))
 
 
 def classify(tasks, now):
@@ -136,19 +163,36 @@ def fmt_date(s):
         return ""
 
 
+def due_text(dl, today):
+    d = days_left({"deadline": dl}, today)
+    if d < 0:
+        return f"quá hạn {-d} ngày"
+    if d == 0:
+        return "hạn hôm nay"
+    return f"còn {d} ngày · {fmt_date(dl)}"
+
+
 def when_text(t, now):
     d = days_left(t, now.date())
-    if d is None:
-        return "Không có deadline"
     at = f" {t['time']}" if parse_time(t) else ""
-    if d < 0:
-        return f"Quá hạn {-d} ngày · {fmt_date(t['deadline'])}{at}"
-    if d == 0:
+    if d is None:
+        text = "Không có deadline"
+    elif d < 0:
+        text = f"Quá hạn {-d} ngày · {fmt_date(t['deadline'])}{at}"
+    elif d == 0:
         tm = parse_time(t)
-        if tm and now.time() > tm:
-            return f"Quá hạn từ {t['time']} hôm nay"
-        return f"Hạn hôm nay{at}"
-    return f"Còn {d} ngày · {fmt_date(t['deadline'])}{at}"
+        text = f"Quá hạn từ {t['time']} hôm nay" if tm and now.time() > tm else f"Hạn hôm nay{at}"
+    else:
+        text = f"Còn {d} ngày · {fmt_date(t['deadline'])}{at}"
+    it = urgent_item(t)
+    if it:
+        late = days_left(it, now.date()) < 0
+        sub = due_text(it["deadline"], now.date())
+        text += (
+            f'<br>↳ Việc con gần nhất “{html.escape(it.get("text", ""))}”: '
+            + (f'<b style="color:#dc2626">{sub}</b>' if late else sub)
+        )
+    return text
 
 
 def bar(p):
@@ -193,9 +237,16 @@ def task_html(t, now, site_url):
     it = items(t)
     checklist = ""
     if it:
+        def due(i):
+            if not i.get("deadline") or days_left(i, now.date()) is None:
+                return ""
+            d = days_left(i, now.date())
+            color = "#9ca3af" if i.get("done") else "#dc2626" if d < 0 else "#ea580c" if d == 0 else "#6b7280"
+            return f' <span style="color:{color};font-size:12px">📅 {fmt_date(i["deadline"])[:5]}</span>'
+
         lines = "".join(
             f'<div style="font-size:13px;color:{"#9ca3af" if i.get("done") else "#333"}">'
-            f'{"☑" if i.get("done") else "☐"} {html.escape(i.get("text", ""))}</div>'
+            f'{"☑" if i.get("done") else "☐"} {html.escape(i.get("text", ""))}{due(i)}</div>'
             for i in it
         )
         checklist = f'<div style="margin-top:4px">{lines}</div>'
@@ -311,10 +362,11 @@ def build_weekly(tasks, now, site_url):
     groups = classify(tasks, now)
     overdue = groups["overdue"]
     today = now.date()
-    next_week = sorted(
-        [t for t in tasks if not is_done(t) and (d := days_left(t, today)) is not None and 0 <= d <= 7],
-        key=lambda t: (t.get("deadline"), t.get("time") or "99:99"),
-    )
+    def due_soon(t):
+        dls = [t] + [i for i in items(t) if not i.get("done")]
+        return any((d := days_left(x, today)) is not None and 0 <= d <= 7 for x in dls)
+
+    next_week = sorted([t for t in tasks if not is_done(t) and due_soon(t)], key=eff_deadline)
     open_all = [t for g in groups.values() for t in g]
     if not done_week and not open_all:
         return None
