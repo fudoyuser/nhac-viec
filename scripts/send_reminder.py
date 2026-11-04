@@ -141,14 +141,27 @@ def progress_of(t):
         return min(99, int(count_value(t) / num(t["total"]) * 100))
     it = items(t)
     if it:
-        return round(sum(1 for i in it if i.get("done")) / len(it) * 100)
+        if item_task_done(t):
+            return 100
+        return min(99, round(sum(1 for i in it if i.get("done")) / len(it) * 100))
     try:
         return max(0, min(100, int(float(t.get("progress") or 0))))
     except ValueError:
         return 0
 
 
+def item_task_done(t):
+    """Việc có việc con chỉ xong khi đã bấm ✓ Xong (done = true), không tự xong khi tích hết việc con.
+    Dữ liệu cũ (chưa có cờ done) mà đã tích hết việc con và có doneAt thì vẫn coi là xong."""
+    it = items(t)
+    if t.get("done") is True:
+        return True
+    return t.get("done") is None and bool(t.get("doneAt")) and bool(it) and all(i.get("done") for i in it)
+
+
 def is_done(t):
+    if not is_count(t) and items(t):
+        return item_task_done(t)
     return progress_of(t) >= 100
 
 
@@ -352,6 +365,8 @@ def task_html(t, now, site_url):
             plus_text = f"+{fmt_num(step_of(t))} {html.escape(t.get('unit') or '')}"
         elif any(not i.get("done") for i in it):
             plus_text = "☑ Tích việc con tiếp theo"
+        elif it:
+            plus_text = ""  # đã tích hết việc con: chỉ còn nút Xong cả việc
         else:
             plus_text = "+25%"
         sub_btn = ""
@@ -362,9 +377,9 @@ def task_html(t, now, site_url):
             )
         buttons = (
             '<div style="margin-top:8px">'
-            + button(f"{site_url}?act=plus&id={tid}", plus_text)
+            + (button(f"{site_url}?act=plus&id={tid}", plus_text) if plus_text else "")
             + sub_btn
-            + button(f"{site_url}?act=done&id={tid}", "✓ Xong", primary=True)
+            + button(f"{site_url}?act=done&id={tid}", "✓ Xong cả việc" if it and not is_count(t) else "✓ Xong", primary=True)
             + "</div>"
         )
     count_html = ""

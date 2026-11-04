@@ -5,6 +5,7 @@ Website quản lý công việc cá nhân, tự gửi email nhắc tiến độ.
 ## Tính năng
 **Website** (GitHub Pages, không cần đăng nhập)
 - Thêm, sửa, xóa việc: nhóm, mức ưu tiên, deadline kèm giờ, ghi chú
+- **Tích hết việc con chưa có nghĩa là xong việc chính** (vẫn có thể thêm việc con): bấm **✓ Xong cả việc** để hoàn tất
 - **Việc con (checklist)**, mỗi việc con có deadline riêng (ngày + giờ 24h): tiến độ tự tính theo số mục đã tích; việc con trễ hạn sẽ đẩy cả việc lên mục quá hạn, hiện trên lịch và trong mail
 - **Đo tiến độ bằng số lượng** (trang, tập, phút…): ví dụ 135/228 trang. Có ô gõ thẳng "đang ở trang mấy", nút +10 trang, và **nhịp độ cần đạt** (cần ~18 trang/ngày, đang chậm hay đúng tiến độ)
 - **Phim nhiều tập**: theo dõi cả số tập đã xem lẫn phút đang xem dở của tập hiện tại; xem hết phút thì tự sang tập mới

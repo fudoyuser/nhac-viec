@@ -399,10 +399,17 @@
       return Math.min(99, Math.floor((countValue(t) / num(t.total)) * 100));
     }
     const it = items(t);
-    if (it.length) return Math.round((it.filter((i) => i.done).length / it.length) * 100);
+    if (it.length) {
+      if (t.done === true) return 100;
+      return Math.min(99, Math.round((it.filter((i) => i.done).length / it.length) * 100));
+    }
     return Math.max(0, Math.min(100, +t.progress || 0));
   }
-  const isDone = (t) => progressOf(t) >= 100;
+  // Việc có việc con: tích hết việc con KHÔNG có nghĩa là xong việc chính (còn có thể thêm việc con).
+  // Việc chính chỉ xong khi bấm ✓ Xong (t.done = true).
+  const usesItems = (t) => !isCount(t) && items(t).length > 0;
+  const allItemsDone = (t) => items(t).length > 0 && items(t).every((i) => i.done);
+  const isDone = (t) => (usesItems(t) ? t.done === true : progressOf(t) >= 100);
   function remindOf(t) {
     const v = t.remindBefore;
     return v === undefined || v === null || v === "" || isNaN(+v) ? 3 : Math.max(0, +v);
@@ -496,6 +503,7 @@
     const now = new Date().toISOString();
     const today = todayStr();
     for (const t of [...list]) {
+      if (usesItems(t) && t.done === true && !allItemsDone(t)) t.done = false;
       if (isDone(t)) {
         if (!t.doneAt) t.doneAt = now;
         if (REPEAT_TEXT[t.repeat] && !t.nextCreated) {
@@ -542,6 +550,7 @@
     const data = JSON.parse(b64decode(j.content));
     // Dữ liệu cũ là một mảng việc; dữ liệu mới là { groups, tasks }
     tasks = Array.isArray(data) ? data : data.tasks || [];
+    tasks.forEach((t) => { if (usesItems(t) && t.done === undefined && t.doneAt && allItemsDone(t)) t.done = true; });
     groups = Array.isArray(data) ? [] : data.groups || [];
   }
 
@@ -680,7 +689,9 @@
         ? `<button class="sm" data-act="reopen" ${dis}>Mở lại</button>`
         : `<button class="sm" data-act="done" ${dis}>✓ Xong</button>`
       : it.length
-      ? ""
+      ? isDone(t)
+        ? `<button class="sm" data-act="reopen" ${dis}>Mở lại</button>`
+        : `<button class="sm" data-act="done" ${dis}>✓ Xong cả việc</button>`
       : isDone(t)
         ? `<button class="sm" data-act="reopen" ${dis}>Mở lại</button>`
         : `<button class="sm" data-act="minus" ${dis} aria-label="Giảm 10%">−10%</button>
@@ -707,6 +718,7 @@
             }</span>
           </li>`).join("")}</ul>` : ""}
         ${countBlock}
+        ${usesItems(t) && allItemsDone(t) && !isDone(t) ? `<div class="pace">✅ Đã xong hết việc con. Thêm việc con mới, hoặc bấm “✓ Xong cả việc” nếu việc này đã hoàn tất.</div>` : ""}
         <div class="progress">
           <div class="pbar"><i style="width:${p}%;background:${p >= 100 ? "var(--green)" : "var(--primary)"}"></i></div>
           <span class="pval">${p}%</span>
@@ -998,6 +1010,16 @@
       note: $("fNote").value.trim(),
     };
     if (data.repeat && !data.deadline) return msg("Việc lặp lại cần có deadline", "err");
+    {
+      const today = todayStr();
+      const dates = [["Deadline", data.deadline], ...data.items.map((i) => [`Việc con “${i.text}”`, i.deadline])].filter(([, d]) => d);
+      for (const [who, d] of dates) {
+        const diff = daysBetween(today, d);
+        if (diff < -365 || diff > 3650) {
+          if (!confirm(`${who}: ngày ${fmt(d)} ${diff < 0 ? "đã qua hơn 1 năm" : "xa hơn 10 năm"}, có thể bị nhầm năm.\nBấm Hủy để sửa lại, OK để vẫn lưu.`)) return;
+        }
+      }
+    }
     if ($("fMeasure").value === "count") {
       const c = readCountFields();
       if (!(c.total > 0)) return msg("Nhập tổng số (ví dụ 228 trang)", "err");
@@ -1055,8 +1077,16 @@
     }
     const step = { plus: 10, minus: -10 }[act];
     if (step) return mutate((list) => { const x = byId(list, id); if (x) x.progress = Math.max(0, Math.min(100, (+x.progress || 0) + step)); }, `Tiến độ: ${t.title}`);
-    if (act === "done") return mutate((list) => { const x = byId(list, id); if (x) x.progress = 100; }, "Xong: " + t.title, t.repeat ? "Đã xong ✓ Đã tạo kỳ tiếp theo" : "Đã xong ✓");
-    if (act === "reopen") return mutate((list) => { const x = byId(list, id); if (x) x.progress = 0; }, "Mở lại: " + t.title);
+    if (act === "done") {
+      if (usesItems(t) && !allItemsDone(t) && !confirm(`Còn ${items(t).filter((i) => !i.done).length} việc con chưa xong. Đánh dấu xong cả việc (tích hết việc con)?`)) return;
+      return mutate((list) => {
+        const x = byId(list, id);
+        if (!x) return;
+        x.progress = 100;
+        if (items(x).length) { x.items.forEach((i) => (i.done = true)); x.done = true; }
+      }, "Xong: " + t.title, t.repeat ? "Đã xong ✓ Đã tạo kỳ tiếp theo" : "Đã xong ✓");
+    }
+    if (act === "reopen") return mutate((list) => { const x = byId(list, id); if (x) { x.progress = 0; x.done = false; } }, "Mở lại: " + t.title);
   });
 
   // Gõ số trực tiếp: "Đang ở" trang/tập, hoặc phút đang dở
@@ -1185,6 +1215,7 @@
         if (!x) return;
         if (items(x).length) x.items.forEach((i) => (i.done = true));
         if (isCount(x)) applyCount(x, "done");
+        if (items(x).length) x.done = true;
         x.progress = 100;
       }, "Xong (từ email): " + t.title, `Đã đánh dấu xong “${t.title}” ✓${t.repeat ? " Đã tạo kỳ tiếp theo." : ""}`);
     } else if (isCount(t) && (act === "plus" || act === "splus")) {
@@ -1195,6 +1226,8 @@
       }, "Tiến độ (từ email): " + t.title, "");
       const x = byId(tasks, id);
       if (ok && x) msg(isDone(x) ? `Đã xong “${x.title}” ✓` : `“${x.title}”: ${fmtNum(num(x.current))}/${fmtNum(num(x.total))} ${x.unit}${hasSub(x) ? ` · ${subLabel(x)}: ${fmtNum(num(x.sub.current))}/${fmtNum(num(x.sub.total))} ${x.sub.unit}` : ""} ✓${info}`);
+    } else if (act === "plus" && usesItems(t) && allItemsDone(t)) {
+      msg(`“${t.title}”: đã xong hết việc con. Bấm “✓ Xong cả việc” nếu việc này đã hoàn tất.`);
     } else if (act === "plus") {
       const ok = await mutate((list) => {
         const x = byId(list, id);
