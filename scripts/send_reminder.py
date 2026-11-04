@@ -111,6 +111,42 @@ def render(groups, today, site_url):
     return "".join(parts)
 
 
+def check_secrets():
+    """Làm sạch và kiểm tra secrets, báo lỗi dễ hiểu mà không in giá trị ra log."""
+    raw_user = os.environ.get("GMAIL_USER", "")
+    raw_pass = os.environ.get("GMAIL_APP_PASSWORD", "")
+    user = "".join(raw_user.split())
+    password = "".join(raw_pass.split())
+    to = "".join((os.environ.get("MAIL_TO") or "").split()) or user
+
+    problems = []
+    if not user:
+        problems.append("Thiếu secret GMAIL_USER.")
+    elif "=" in user or user.count("@") != 1 or not user.isascii():
+        problems.append(
+            "GMAIL_USER không phải một địa chỉ email hợp lệ. Ô Secret chỉ được chứa đúng địa chỉ, "
+            "ví dụ ten@gmail.com (không ghi 'GMAIL_USER =')."
+        )
+    if not password:
+        problems.append("Thiếu secret GMAIL_APP_PASSWORD.")
+    elif not (len(password) == 16 and password.isascii() and password.isalpha()):
+        problems.append(
+            f"GMAIL_APP_PASSWORD sau khi bỏ dấu cách có {len(password)} ký tự"
+            f"{'' if password.isascii() else ', có ký tự không phải ASCII'}"
+            f"{', có chứa dấu =' if '=' in password else ''}. "
+            "App Password của Gmail phải đúng 16 chữ cái. Ô Secret chỉ được chứa đúng mã đó."
+        )
+    if problems:
+        print("LỖI CẤU HÌNH SECRETS:")
+        for p in problems:
+            print(" - " + p)
+        print("Sửa tại: repo → Settings → Secrets and variables → Actions → bấm vào secret → Update.")
+        sys.exit(1)
+    if raw_user != user or raw_pass.replace(" ", "") != password:
+        print("Lưu ý: đã tự bỏ dấu xuống dòng hoặc khoảng trắng thừa trong secrets.")
+    return user, password, to
+
+
 def main():
     dry_run = "--dry-run" in sys.argv
     today = datetime.now(TZ).date()
@@ -133,9 +169,7 @@ def main():
         print(body)
         return
 
-    user = os.environ["GMAIL_USER"]
-    password = os.environ["GMAIL_APP_PASSWORD"].replace(" ", "")
-    to = os.environ.get("MAIL_TO") or user
+    user, password, to = check_secrets()
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
@@ -144,7 +178,16 @@ def main():
     msg.attach(MIMEText(body, "html", "utf-8"))
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
-        s.login(user, password)
+        try:
+            s.login(user, password)
+        except (smtplib.SMTPAuthenticationError, smtplib.SMTPServerDisconnected) as e:
+            print(f"LỖI ĐĂNG NHẬP GMAIL: {e}")
+            print(
+                "Kiểm tra: (1) GMAIL_USER đúng là tài khoản đã tạo App Password; "
+                "(2) App Password còn hiệu lực (chưa bị xóa); "
+                "(3) tài khoản đã bật xác minh 2 bước."
+            )
+            sys.exit(1)
         s.sendmail(user, [a.strip() for a in to.split(",")], msg.as_string())
     print(f"Đã gửi mail tới {to}: {subject}")
 
