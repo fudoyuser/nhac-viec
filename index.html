@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nhắc việc</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #111827; --muted: #6b7280; --line: #e5e7eb;
+    --primary: #2563eb; --red: #dc2626; --orange: #ea580c; --yellow: #ca8a04; --green: #16a34a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1115; --card: #181b21; --text: #e5e7eb; --muted: #9ca3af; --line: #2a2f38; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 24px; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+  button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  button.danger { color: var(--red); }
+  button:disabled { opacity: .5; cursor: default; }
+  input, textarea { font: inherit; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-top: 12px; }
+  .stats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  .stat { flex: 1 1 120px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 22px; }
+  .stat span { font-size: 13px; color: var(--muted); }
+  .task { border-left: 4px solid var(--muted); }
+  .task.overdue { border-left-color: var(--red); }
+  .task.today { border-left-color: var(--orange); }
+  .task.soon { border-left-color: var(--yellow); }
+  .task.done { border-left-color: var(--green); opacity: .65; }
+  .task.done .title { text-decoration: line-through; }
+  .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .title { font-weight: 600; word-break: break-word; }
+  .meta { font-size: 13px; color: var(--muted); }
+  .note { font-size: 14px; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
+  .prog { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+  .prog input { flex: 1; padding: 0; }
+  .prog span { width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
+  .actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
+  .bar { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+  .msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 14px; display: none; }
+  .msg.show { display: block; }
+  .msg.err { background: #fee2e2; color: #991b1b; }
+  .msg.ok { background: #dcfce7; color: #166534; }
+  .hidden { display: none; }
+  .empty { text-align: center; color: var(--muted); padding: 30px 0; }
+  .filter { display: flex; gap: 6px; margin-top: 16px; flex-wrap: wrap; }
+  .filter button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+  small.help { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>📋 Nhắc việc</h1>
+    <div style="display:flex;gap:6px">
+      <button id="btnSettings">⚙️ Cài đặt</button>
+      <button class="primary" id="btnAdd">+ Thêm việc</button>
+    </div>
+  </header>
+
+  <div id="msg" class="msg"></div>
+
+  <div id="settings" class="card hidden">
+    <b>Kết nối GitHub</b>
+    <p class="meta">Website lưu công việc vào file <code>tasks.json</code> trong repo. Bạn cần một token có quyền ghi vào repo này. Token chỉ lưu trong trình duyệt của bạn.</p>
+    <div class="grid2">
+      <div><label>Chủ repo (owner)</label><input id="sOwner"></div>
+      <div><label>Tên repo</label><input id="sRepo"></div>
+    </div>
+    <label>GitHub token</label>
+    <input id="sToken" type="password" placeholder="github_pat_...">
+    <small class="help">Tạo token tại GitHub → Settings → Developer settings → Fine-grained tokens. Chọn đúng repo này, quyền <b>Contents: Read and write</b>.</small>
+    <div class="bar">
+      <button id="sCancel">Đóng</button>
+      <button class="primary" id="sSave">Lưu</button>
+    </div>
+  </div>
+
+  <div id="form" class="card hidden">
+    <b id="formTitle">Thêm việc</b>
+    <label>Tên công việc</label>
+    <input id="fTitle" maxlength="200">
+    <div class="grid2">
+      <div><label>Deadline</label><input id="fDeadline" type="date"></div>
+      <div><label>Nhắc gấp trước (ngày)</label><input id="fRemind" type="number" min="0" max="60" value="3"></div>
+    </div>
+    <label>Tiến độ: <span id="fProgVal">0</span>%</label>
+    <input id="fProgress" type="range" min="0" max="100" step="5" value="0" style="padding:0">
+    <label>Ghi chú</label>
+    <textarea id="fNote" rows="2"></textarea>
+    <div class="bar">
+      <button id="fCancel">Hủy</button>
+      <button class="primary" id="fSave">Lưu</button>
+    </div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+  <div class="filter" id="filter">
+    <button data-f="open" class="on">Chưa xong</button>
+    <button data-f="all">Tất cả</button>
+    <button data-f="done">Đã xong</button>
+  </div>
+  <div id="list"></div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k) { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  // Tự đoán owner/repo từ địa chỉ GitHub Pages: https://owner.github.io/repo/
+  const guessOwner = location.hostname.endsWith(".github.io") ? location.hostname.split(".")[0] : "";
+  const guessRepo = location.hostname.endsWith(".github.io") ? (location.pathname.split("/")[1] || "") : "";
+  const cfg = {
+    owner: store.get("nv_owner") || guessOwner,
+    repo: store.get("nv_repo") || guessRepo,
+    token: store.get("nv_token"),
+  };
+
+  let tasks = [];
+  let sha = null;
+  let editingId = null;
+  let filter = "open";
+  let saving = false;
+
+  function msg(text, type = "ok") {
+    const el = $("msg");
+    el.textContent = text;
+    el.className = "msg show " + type;
+    if (type === "ok") setTimeout(() => el.classList.remove("show"), 2500);
+  }
+
+  const b64encode = (str) => {
+    const bytes = new TextEncoder().encode(str);
+    let bin = "";
+    bytes.forEach((b) => (bin += String.fromCharCode(b)));
+    return btoa(bin);
+  };
+  const b64decode = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\n/g, "")), (c) => c.charCodeAt(0)));
+
+  const apiUrl = () => `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/tasks.json`;
+  const headers = () => ({ Accept: "application/vnd.github+json", ...(cfg.token ? { Authorization: "Bearer " + cfg.token } : {}) });
+
+  async function load() {
+    try {
+      if (cfg.owner && cfg.repo) {
+        const r = await fetch(apiUrl() + "?t=" + Date.now(), { headers: headers(), cache: "no-store" });
+        if (!r.ok) throw new Error("GitHub API " + r.status);
+        const j = await r.json();
+        sha = j.sha;
+        tasks = JSON.parse(b64decode(j.content));
+      } else {
+        const r = await fetch("tasks.json?t=" + Date.now(), { cache: "no-store" });
+        tasks = await r.json();
+      }
+    } catch (e) {
+      msg("Không tải được danh sách việc: " + e.message + ". Kiểm tra phần Cài đặt.", "err");
+      tasks = [];
+    }
+    render();
+  }
+
+  async function save(note) {
+    if (!cfg.token || !cfg.owner || !cfg.repo) {
+      msg("Chưa có token GitHub. Mở ⚙️ Cài đặt để nhập token, nếu không thay đổi sẽ không được lưu.", "err");
+      $("settings").classList.remove("hidden");
+      return false;
+    }
+    saving = true;
+    render();
+    try {
+      const body = { message: note, content: b64encode(JSON.stringify(tasks, null, 2) + "\n"), ...(sha ? { sha } : {}) };
+      const r = await fetch(apiUrl(), { method: "PUT", headers: { ...headers(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (r.status === 409) throw new Error("File vừa bị thay đổi ở nơi khác, tải lại trang rồi thử lại");
+      if (!r.ok) throw new Error("GitHub API " + r.status + " " + ((await r.json().catch(() => ({}))).message || ""));
+      sha = (await r.json()).content.sha;
+      msg("Đã lưu ✓");
+      return true;
+    } catch (e) {
+      msg("Lưu thất bại: " + e.message, "err");
+      return false;
+    } finally {
+      saving = false;
+      render();
+    }
+  }
+
+  function todayStr() {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  }
+  function daysLeft(dl) {
+    if (!dl) return null;
+    return Math.round((new Date(dl + "T00:00:00") - new Date(todayStr() + "T00:00:00")) / 86400000);
+  }
+  function statusOf(t) {
+    if (+t.progress >= 100) return "done";
+    const d = daysLeft(t.deadline);
+    if (d === null) return "later";
+    if (d < 0) return "overdue";
+    if (d === 0) return "today";
+    if (d <= (+t.remindBefore || 3)) return "soon";
+    return "later";
+  }
+  function whenText(t) {
+    if (+t.progress >= 100) return "Đã xong";
+    const d = daysLeft(t.deadline);
+    if (d === null) return "Không có deadline";
+    if (d < 0) return `Quá hạn ${-d} ngày`;
+    if (d === 0) return "Hạn hôm nay";
+    return `Còn ${d} ngày`;
+  }
+  const fmt = (dl) => (dl ? dl.split("-").reverse().join("/") : "");
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  function render() {
+    const counts = { open: 0, overdue: 0, urgent: 0, done: 0 };
+    tasks.forEach((t) => {
+      const s = statusOf(t);
+      if (s === "done") counts.done++;
+      else counts.open++;
+      if (s === "overdue") counts.overdue++;
+      if (s === "today" || s === "soon") counts.urgent++;
+    });
+    $("stats").innerHTML = `
+      <div class="stat"><b>${counts.open}</b><span>Chưa xong</span></div>
+      <div class="stat"><b style="color:var(--red)">${counts.overdue}</b><span>Quá hạn</span></div>
+      <div class="stat"><b style="color:var(--orange)">${counts.urgent}</b><span>Sắp đến hạn</span></div>
+      <div class="stat"><b style="color:var(--green)">${counts.done}</b><span>Đã xong</span></div>`;
+
+    const order = { overdue: 0, today: 1, soon: 2, later: 3, done: 4 };
+    const shown = tasks
+      .filter((t) => filter === "all" || (filter === "done" ? statusOf(t) === "done" : statusOf(t) !== "done"))
+      .sort((a, b) => order[statusOf(a)] - order[statusOf(b)] || (a.deadline || "9999").localeCompare(b.deadline || "9999"));
+
+    $("list").innerHTML = shown.length
+      ? shown.map((t) => `
+        <div class="card task ${statusOf(t)}" data-id="${esc(t.id)}">
+          <div class="row">
+            <div>
+              <div class="title">${esc(t.title)}</div>
+              <div class="meta">${whenText(t)}${t.deadline ? " · " + fmt(t.deadline) : ""}</div>
+            </div>
+            <div class="actions">
+              <button data-act="edit" ${saving ? "disabled" : ""}>Sửa</button>
+              <button data-act="del" class="danger" ${saving ? "disabled" : ""}>Xóa</button>
+            </div>
+          </div>
+          ${t.note ? `<div class="note">${esc(t.note)}</div>` : ""}
+          <div class="prog">
+            <input type="range" min="0" max="100" step="5" value="${+t.progress || 0}" data-act="prog" ${saving ? "disabled" : ""}>
+            <span>${+t.progress || 0}%</span>
+          </div>
+        </div>`).join("")
+      : `<div class="empty">${filter === "done" ? "Chưa có việc nào xong." : "Không có việc nào. Bấm “+ Thêm việc” để bắt đầu."}</div>`;
+  }
+
+  function openForm(t) {
+    editingId = t ? t.id : null;
+    $("formTitle").textContent = t ? "Sửa việc" : "Thêm việc";
+    $("fTitle").value = t?.title || "";
+    $("fDeadline").value = t?.deadline || "";
+    $("fRemind").value = t?.remindBefore ?? 3;
+    $("fProgress").value = t?.progress ?? 0;
+    $("fProgVal").textContent = $("fProgress").value;
+    $("fNote").value = t?.note || "";
+    $("form").classList.remove("hidden");
+    $("fTitle").focus();
+  }
+
+  $("btnAdd").onclick = () => openForm(null);
+  $("fCancel").onclick = () => $("form").classList.add("hidden");
+  $("fProgress").oninput = (e) => ($("fProgVal").textContent = e.target.value);
+  $("fSave").onclick = async () => {
+    const title = $("fTitle").value.trim();
+    if (!title) return msg("Nhập tên công việc", "err");
+    const data = {
+      title,
+      deadline: $("fDeadline").value,
+      progress: +$("fProgress").value,
+      note: $("fNote").value.trim(),
+      remindBefore: Math.max(0, +$("fRemind").value || 0),
+    };
+    let label;
+    if (editingId) {
+      Object.assign(tasks.find((t) => t.id === editingId), data);
+      label = "Sửa: " + title;
+    } else {
+      tasks.push({ id: Date.now().toString(36), ...data });
+      label = "Thêm: " + title;
+    }
+    $("form").classList.add("hidden");
+    render();
+    await save(label);
+  };
+
+  $("list").addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const id = btn.closest(".task").dataset.id;
+    const t = tasks.find((x) => x.id === id);
+    if (btn.dataset.act === "edit") openForm(t);
+    if (btn.dataset.act === "del" && confirm(`Xóa “${t.title}”?`)) {
+      tasks = tasks.filter((x) => x.id !== id);
+      render();
+      await save("Xóa: " + t.title);
+    }
+  });
+  $("list").addEventListener("input", (e) => {
+    if (e.target.dataset.act === "prog") e.target.nextElementSibling.textContent = e.target.value + "%";
+  });
+  $("list").addEventListener("change", async (e) => {
+    if (e.target.dataset.act !== "prog") return;
+    const t = tasks.find((x) => x.id === e.target.closest(".task").dataset.id);
+    t.progress = +e.target.value;
+    render();
+    await save(`Tiến độ ${t.progress}%: ${t.title}`);
+  });
+
+  $("filter").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-f]");
+    if (!b) return;
+    filter = b.dataset.f;
+    document.querySelectorAll("#filter button").forEach((x) => x.classList.toggle("on", x === b));
+    render();
+  });
+
+  $("btnSettings").onclick = () => {
+    $("sOwner").value = cfg.owner;
+    $("sRepo").value = cfg.repo;
+    $("sToken").value = cfg.token;
+    $("settings").classList.toggle("hidden");
+  };
+  $("sCancel").onclick = () => $("settings").classList.add("hidden");
+  $("sSave").onclick = () => {
+    cfg.owner = $("sOwner").value.trim();
+    cfg.repo = $("sRepo").value.trim();
+    cfg.token = $("sToken").value.trim();
+    store.set("nv_owner", cfg.owner);
+    store.set("nv_repo", cfg.repo);
+    store.set("nv_token", cfg.token);
+    $("settings").classList.add("hidden");
+    msg("Đã lưu cài đặt");
+    load();
+  };
+
+  if (!cfg.token) msg("Lần đầu dùng: mở ⚙️ Cài đặt và nhập GitHub token để có thể lưu công việc.", "err");
+  load();
+})();
+</script>
+</body>
+</html>
