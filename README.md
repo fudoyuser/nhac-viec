@@ -1,9 +1,23 @@
 # 📋 Nhắc việc
 
-Website quản lý công việc cá nhân, tự gửi email nhắc tiến độ mỗi ngày.
+Website quản lý công việc cá nhân, tự gửi email nhắc tiến độ.
 
-- **Website** (GitHub Pages): thêm, sửa, xóa việc, kéo thanh tiến độ. Dữ liệu lưu trong `tasks.json`.
-- **Email** (GitHub Actions): 7h, 9h, 12h, 15h, 18h, 20h, 22h mỗi ngày (giờ VN), gửi danh sách việc quá hạn, đến hạn hôm nay, sắp đến hạn và đang theo dõi.
+## Tính năng
+**Website** (GitHub Pages, không cần đăng nhập)
+- Thêm, sửa, xóa việc: nhóm, mức ưu tiên, deadline kèm giờ, ghi chú
+- **Việc con (checklist)**: tiến độ tự tính theo số mục đã tích
+- **Việc lặp lại** hằng ngày, tuần, tháng: bấm Xong là tự tạo kỳ tiếp theo
+- Nút −10% / +10% / ✓ Xong (không còn thanh kéo dễ chạm nhầm khi cuộn)
+- Lọc theo nhóm, tìm kiếm, sắp xếp (mức gấp, ưu tiên, deadline, tiến độ, tên)
+- **Xem dạng lịch** theo tháng
+- Cài như ứng dụng trên điện thoại: Chrome → menu → *Thêm vào màn hình chính*; Safari → Chia sẻ → *Thêm vào MH chính*
+- Lưu lỗi thì màn hình tự trở về dữ liệu đã lưu; nếu 2 máy cùng sửa, website tự tải bản mới rồi lưu lại
+
+**Email** (GitHub Actions, 7h, 9h, 12h, 15h, 18h, 20h, 22h giờ VN)
+- **7h sáng**: bản đầy đủ mọi việc chưa xong, chia theo mức gấp
+- **Các giờ khác**: chỉ gửi khi có việc quá hạn hoặc hạn hôm nay
+- **20h Chủ nhật**: báo cáo tuần (đã xong, quá hạn, tuần tới)
+- Mỗi việc trong mail có nút **+25%** (hoặc *tích việc con tiếp theo*) và **✓ Xong**: bấm là cập nhật ngay
 
 ## Cách lưu dữ liệu
 - Danh sách việc nằm trong `tasks.json` của repo **private** `<repo>-data` (ví dụ `nhac-viec-data`).
@@ -34,11 +48,12 @@ Settings → Secrets and variables → Actions → New repository secret:
 Settings → Pages → Source: **GitHub Actions**. Sau đó vào tab Actions → *Dựng website* → Run workflow.
 
 ### 5. Gửi thử
-Actions → *Gửi mail nhắc việc* → Run workflow.
+Actions → *Gửi mail nhắc việc* → Run workflow → chọn loại mail (full / urgent / weekly / auto).
 
 ## Tùy chỉnh
-- **Giờ gửi mail**: sửa các dòng `cron` trong `.github/workflows/reminder.yml` (giờ UTC = giờ VN − 7).
+- **Giờ gửi mail**: sửa dòng `cron` trong `.github/workflows/reminder.yml` (giờ UTC = giờ VN − 7).
 - **"Nhắc gấp trước (ngày)"** của từng việc: khi còn ≤ số ngày này, việc được đưa lên mục *Sắp đến hạn*.
+- **Loại mail theo giờ**: sửa hàm `pick_mode` trong `scripts/send_reminder.py`.
 - Việc có tiến độ 100% được coi là xong và không còn được nhắc.
 - **Nhóm**: gõ tên nhóm khi thêm việc (Công ty, Cá nhân…). Website có thanh chọn nhóm, email gắn nhãn nhóm cho từng việc.
 

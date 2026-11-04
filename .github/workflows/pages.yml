@@ -21,7 +21,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Chèn cấu hình vào trang
         env:
           DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
@@ -31,6 +31,7 @@ jobs:
           TOKEN_B64=$(printf '%s' "$(echo "$DATA_TOKEN" | tr -d '[:space:]')" | base64 -w0)
           mkdir -p _site
           sed -e "s|__DATA_REPO__|$DATA_REPO|" -e "s|__DATA_TOKEN_B64__|$TOKEN_B64|" index.html > _site/index.html
+          cp -r manifest.webmanifest sw.js icons _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

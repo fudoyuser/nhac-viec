@@ -1,10 +1,18 @@
 """Đọc tasks.json và gửi email nhắc việc qua Gmail SMTP.
 
-Biến môi trường cần có (đặt trong GitHub Secrets):
+Biến môi trường (đặt trong GitHub Secrets / workflow):
   GMAIL_USER          địa chỉ Gmail dùng để gửi
-  GMAIL_APP_PASSWORD  App Password 16 ký tự của Gmail (không phải mật khẩu thường)
-  MAIL_TO             (tùy chọn) địa chỉ nhận, mặc định = GMAIL_USER
-  SITE_URL            (tùy chọn) link website để chèn vào mail
+  GMAIL_APP_PASSWORD  App Password 16 chữ cái của Gmail (không phải mật khẩu thường)
+  MAIL_TO             (tùy chọn) địa chỉ nhận, nhiều địa chỉ cách nhau bằng dấu phẩy; mặc định = GMAIL_USER
+  SITE_URL            (tùy chọn) link website, dùng cho các nút bấm trong mail
+  TASKS_FILE          (tùy chọn) đường dẫn tasks.json
+  MODE                auto | full | urgent | weekly  (mặc định auto)
+
+Chế độ:
+  full    bản đầy đủ: mọi việc chưa xong, chia theo mức gấp
+  urgent  chỉ việc quá hạn và hạn hôm nay; không có thì không gửi
+  weekly  báo cáo tuần: đã xong, quá hạn, tuần tới
+  auto    trước 9h sáng (giờ VN) = full; tối Chủ nhật (20h–22h) = weekly; còn lại = urgent
 
 Chạy thử không gửi mail:  python scripts/send_reminder.py --dry-run
 """
@@ -14,15 +22,21 @@ import json
 import os
 import smtplib
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from pathlib import Path
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Asia/Ho_Chi_Minh")
 TASKS_FILE = Path(os.environ.get("TASKS_FILE") or Path(__file__).resolve().parent.parent / "tasks.json")
+NO_GROUP = "Chưa phân nhóm"
+PRIO_RANK = {"high": 0, "normal": 1, "low": 2}
+REPEAT_TEXT = {"daily": "Hằng ngày", "weekly": "Hằng tuần", "monthly": "Hằng tháng"}
 
+
+# ---------------------------------------------------------------- dữ liệu
 
 def load_tasks():
     if not TASKS_FILE.exists():
@@ -32,114 +46,325 @@ def load_tasks():
         return json.load(f)
 
 
-def classify(tasks, today):
-    groups = {"overdue": [], "today": [], "soon": [], "later": []}
-    for t in tasks:
-        if int(t.get("progress", 0)) >= 100:
-            continue
-        dl = t.get("deadline")
-        if not dl:
-            groups["later"].append((t, None))
-            continue
-        days = (date.fromisoformat(dl) - today).days
-        if days < 0:
-            groups["overdue"].append((t, days))
-        elif days == 0:
-            groups["today"].append((t, days))
-        elif days <= int(t.get("remindBefore", 3)):
-            groups["soon"].append((t, days))
-        else:
-            groups["later"].append((t, days))
-    for g in groups.values():
-        g.sort(key=lambda x: (x[1] is None, x[1] if x[1] is not None else 0))
-    return groups
+def items(t):
+    return t.get("items") if isinstance(t.get("items"), list) else []
 
 
-def bar(progress):
-    p = max(0, min(100, int(progress)))
-    color = "#16a34a" if p >= 70 else "#ca8a04" if p >= 30 else "#dc2626"
-    return (
-        '<div style="background:#e5e7eb;border-radius:4px;height:8px;width:160px">'
-        f'<div style="background:{color};height:8px;border-radius:4px;width:{p * 1.6:.0f}px"></div>'
-        f'</div><span style="font-size:12px;color:#555">{p}%</span>'
-    )
+def progress_of(t):
+    it = items(t)
+    if it:
+        return round(sum(1 for i in it if i.get("done")) / len(it) * 100)
+    try:
+        return max(0, min(100, int(float(t.get("progress") or 0))))
+    except ValueError:
+        return 0
 
 
-def when_text(days):
-    if days is None:
-        return "Không có deadline"
-    if days < 0:
-        return f"Quá hạn {-days} ngày"
-    if days == 0:
-        return "Hạn hôm nay"
-    return f"Còn {days} ngày"
+def is_done(t):
+    return progress_of(t) >= 100
+
+
+def remind_of(t):
+    v = t.get("remindBefore")
+    try:
+        return 3 if v is None or v == "" else max(0, int(v))
+    except (TypeError, ValueError):
+        return 3
+
+
+def prio_of(t):
+    return t.get("priority") if t.get("priority") in PRIO_RANK else "normal"
 
 
 def group_of(t):
     return (t.get("group") or "").strip()
 
 
-def group_summary(groups):
-    """Đếm số việc chưa xong theo nhóm, ví dụ: Công ty 3 · Cá nhân 2."""
-    counts = {}
-    for items in groups.values():
-        for t, _ in items:
-            g = group_of(t) or "Chưa phân nhóm"
-            counts[g] = counts.get(g, 0) + 1
-    if len(counts) < 2 and "Chưa phân nhóm" in counts:
+def parse_time(t):
+    try:
+        return datetime.strptime(t.get("time") or "", "%H:%M").time()
+    except ValueError:
+        return None
+
+
+def days_left(t, today):
+    try:
+        return (date.fromisoformat(t["deadline"]) - today).days
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def status_of(t, now):
+    if is_done(t):
+        return "done"
+    d = days_left(t, now.date())
+    if d is None:
+        return "later"
+    if d < 0:
+        return "overdue"
+    if d == 0:
+        tm = parse_time(t)
+        return "overdue" if tm and now.time() > tm else "today"
+    if d <= remind_of(t):
+        return "soon"
+    return "later"
+
+
+def sort_key(t):
+    return (PRIO_RANK[prio_of(t)], t.get("deadline") or "9999-99-99", t.get("time") or "99:99")
+
+
+def classify(tasks, now):
+    groups = {"overdue": [], "today": [], "soon": [], "later": []}
+    for t in tasks:
+        s = status_of(t, now)
+        if s != "done":
+            groups[s].append(t)
+    for g in groups.values():
+        g.sort(key=sort_key)
+    return groups
+
+
+# ---------------------------------------------------------------- hiển thị
+
+def fmt_date(s):
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").strftime("%d/%m/%Y")
+    except (TypeError, ValueError):
         return ""
-    names = sorted(counts, key=lambda g: (g == "Chưa phân nhóm", g.lower()))
+
+
+def when_text(t, now):
+    d = days_left(t, now.date())
+    if d is None:
+        return "Không có deadline"
+    at = f" {t['time']}" if parse_time(t) else ""
+    if d < 0:
+        return f"Quá hạn {-d} ngày · {fmt_date(t['deadline'])}{at}"
+    if d == 0:
+        tm = parse_time(t)
+        if tm and now.time() > tm:
+            return f"Quá hạn từ {t['time']} hôm nay"
+        return f"Hạn hôm nay{at}"
+    return f"Còn {d} ngày · {fmt_date(t['deadline'])}{at}"
+
+
+def bar(p):
+    color = "#16a34a" if p >= 70 else "#ca8a04" if p >= 30 else "#dc2626"
+    return (
+        '<table cellpadding="0" cellspacing="0" style="margin-top:6px"><tr>'
+        '<td style="background:#e5e7eb;border-radius:4px;width:160px;height:8px">'
+        f'<div style="background:{color};height:8px;border-radius:4px;width:{p * 1.6:.0f}px"></div></td>'
+        f'<td style="font-size:12px;color:#555;padding-left:8px">{p}%</td></tr></table>'
+    )
+
+
+def tag(text, bg="#eef2ff", fg="#3730a3"):
+    return (
+        f'<span style="background:{bg};color:{fg};border-radius:999px;padding:1px 8px;'
+        f'font-size:12px;margin-right:4px">{html.escape(text)}</span>'
+    )
+
+
+def button(href, text, primary=False):
+    style = (
+        "background:#2563eb;color:#fff;border:1px solid #2563eb"
+        if primary
+        else "background:#fff;color:#2563eb;border:1px solid #c7d2fe"
+    )
+    return (
+        f'<a href="{html.escape(href)}" style="{style};display:inline-block;padding:4px 12px;'
+        f'border-radius:6px;font-size:13px;text-decoration:none;margin-right:6px">{text}</a>'
+    )
+
+
+def task_html(t, now, site_url):
+    p = progress_of(t)
+    tags = ""
+    if prio_of(t) == "high":
+        tags += tag("🔥 Cao", "#fee2e2", "#991b1b")
+    if group_of(t):
+        tags += tag(group_of(t))
+    if t.get("repeat") in REPEAT_TEXT:
+        tags += tag("🔁 " + REPEAT_TEXT[t["repeat"]])
+    note = (t.get("note") or "").strip()
+    it = items(t)
+    checklist = ""
+    if it:
+        lines = "".join(
+            f'<div style="font-size:13px;color:{"#9ca3af" if i.get("done") else "#333"}">'
+            f'{"☑" if i.get("done") else "☐"} {html.escape(i.get("text", ""))}</div>'
+            for i in it
+        )
+        checklist = f'<div style="margin-top:4px">{lines}</div>'
+    buttons = ""
+    if site_url and t.get("id"):
+        tid = quote(str(t["id"]))
+        plus_text = "☑ Tích việc con tiếp theo" if any(not i.get("done") for i in it) else "+25%"
+        buttons = (
+            '<div style="margin-top:8px">'
+            + button(f"{site_url}?act=plus&id={tid}", plus_text)
+            + button(f"{site_url}?act=done&id={tid}", "✓ Xong", primary=True)
+            + "</div>"
+        )
+    return (
+        '<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:8px">'
+        + (f"<div>{tags}</div>" if tags else "")
+        + f'<b>{html.escape(t.get("title", ""))}</b><br>'
+        + f'<span style="font-size:13px;color:#555">{when_text(t, now)}</span>'
+        + (f'<div style="font-size:13px;color:#444;margin-top:4px">{html.escape(note)}</div>' if note else "")
+        + checklist
+        + bar(p)
+        + buttons
+        + "</div>"
+    )
+
+
+def group_summary(tasks):
+    counts = {}
+    for t in tasks:
+        g = group_of(t) or NO_GROUP
+        counts[g] = counts.get(g, 0) + 1
+    if not counts or (len(counts) == 1 and NO_GROUP in counts):
+        return ""
+    names = sorted(counts, key=lambda g: (g == NO_GROUP, g.lower()))
     return " · ".join(f"{html.escape(g)} <b>{counts[g]}</b>" for g in names)
 
 
-def render(groups, today, site_url):
-    sections = [
-        ("overdue", "🔴 Quá hạn", "#dc2626"),
-        ("today", "🟠 Hạn hôm nay", "#ea580c"),
-        ("soon", "🟡 Sắp đến hạn", "#ca8a04"),
-        ("later", "⚪ Đang theo dõi", "#6b7280"),
-    ]
-    parts = [
-        '<div style="font-family:Arial,sans-serif;max-width:600px;color:#111">',
-        f'<h2 style="margin:0 0 4px">Nhắc việc ngày {today.strftime("%d/%m/%Y")}</h2>',
-    ]
-    summary = group_summary(groups)
-    if summary:
-        parts.append(f'<div style="font-size:13px;color:#555">Theo nhóm: {summary}</div>')
-    for key, label, color in sections:
-        items = groups[key]
-        if not items:
-            continue
-        parts.append(f'<h3 style="color:{color};margin:20px 0 8px">{label} ({len(items)})</h3>')
-        for t, days in items:
-            dl = t.get("deadline")
-            dl_txt = datetime.strptime(dl, "%Y-%m-%d").strftime("%d/%m/%Y") if dl else ""
-            note = t.get("note", "").strip()
-            g = group_of(t)
-            tag = (
-                '<span style="background:#eef2ff;color:#3730a3;border-radius:999px;padding:1px 8px;'
-                f'font-size:12px;margin-right:6px">{html.escape(g)}</span>'
-                if g
-                else ""
-            )
-            parts.append(
-                '<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:8px">'
-                f'{tag}<b>{html.escape(t.get("title", ""))}</b><br>'
-                f'<span style="font-size:13px;color:#555">{when_text(days)}'
-                f'{" · " + dl_txt if dl_txt else ""}</span><br>'
-                f"{bar(t.get('progress', 0))}"
-                + (f'<div style="font-size:13px;color:#444;margin-top:4px">{html.escape(note)}</div>' if note else "")
-                + "</div>"
-            )
+def wrap(title, body, site_url):
+    footer = ""
     if site_url:
-        parts.append(
-            f'<p style="margin-top:20px"><a href="{html.escape(site_url)}" '
-            'style="background:#2563eb;color:#fff;padding:8px 14px;border-radius:6px;text-decoration:none">'
-            "Cập nhật tiến độ</a></p>"
-        )
-    parts.append("</div>")
+        footer = f'<p style="margin-top:20px">{button(site_url, "Mở danh sách việc", primary=True)}</p>'
+    return (
+        '<div style="font-family:Arial,sans-serif;max-width:600px;color:#111">'
+        f'<h2 style="margin:0 0 4px">{title}</h2>{body}{footer}</div>'
+    )
+
+
+SECTIONS = [
+    ("overdue", "🔴 Quá hạn", "#dc2626"),
+    ("today", "🟠 Hạn hôm nay", "#ea580c"),
+    ("soon", "🟡 Sắp đến hạn", "#ca8a04"),
+    ("later", "⚪ Đang theo dõi", "#6b7280"),
+]
+
+
+def render_sections(groups, keys, now, site_url):
+    parts = []
+    for key, label, color in SECTIONS:
+        if key not in keys or not groups[key]:
+            continue
+        parts.append(f'<h3 style="color:{color};margin:20px 0 8px">{label} ({len(groups[key])})</h3>')
+        parts.extend(task_html(t, now, site_url) for t in groups[key])
     return "".join(parts)
 
+
+# ---------------------------------------------------------------- các loại mail
+
+def build_full(tasks, now, site_url):
+    groups = classify(tasks, now)
+    pending = [t for g in groups.values() for t in g]
+    if not pending:
+        return None
+    summary = group_summary(pending)
+    body = (f'<div style="font-size:13px;color:#555">Theo nhóm: {summary}</div>' if summary else "") + render_sections(
+        groups, {"overdue", "today", "soon", "later"}, now, site_url
+    )
+    urgent = len(groups["overdue"]) + len(groups["today"]) + len(groups["soon"])
+    subject = f"[Nhắc việc] {now:%d/%m}: {len(pending)} việc chưa xong"
+    if groups["overdue"]:
+        subject += f", {len(groups['overdue'])} quá hạn"
+    elif urgent:
+        subject += f", {urgent} việc gấp"
+    return subject, wrap(f"Nhắc việc ngày {now:%d/%m/%Y}", body, site_url)
+
+
+def build_urgent(tasks, now, site_url):
+    groups = classify(tasks, now)
+    n_over, n_today = len(groups["overdue"]), len(groups["today"])
+    if not n_over and not n_today:
+        return None
+    parts = []
+    if n_over:
+        parts.append(f"{n_over} việc quá hạn")
+    if n_today:
+        parts.append(f"{n_today} việc hạn hôm nay")
+    subject = f"[Nhắc việc] ⚠️ {now:%H}h: " + ", ".join(parts)
+    body = render_sections(groups, {"overdue", "today"}, now, site_url)
+    return subject, wrap(f"Cần xử lý ngay ({now:%H:%M})", body, site_url)
+
+
+def build_weekly(tasks, now, site_url):
+    week_ago = now - timedelta(days=7)
+    done_week = []
+    for t in tasks:
+        if not is_done(t) or not t.get("doneAt"):
+            continue
+        try:
+            done_at = datetime.fromisoformat(t["doneAt"].replace("Z", "+00:00")).astimezone(TZ)
+        except ValueError:
+            continue
+        if done_at >= week_ago:
+            done_week.append(t)
+    groups = classify(tasks, now)
+    overdue = groups["overdue"]
+    today = now.date()
+    next_week = sorted(
+        [t for t in tasks if not is_done(t) and (d := days_left(t, today)) is not None and 0 <= d <= 7],
+        key=lambda t: (t.get("deadline"), t.get("time") or "99:99"),
+    )
+    open_all = [t for g in groups.values() for t in g]
+    if not done_week and not open_all:
+        return None
+
+    def stat(n, label, color):
+        return (
+            f'<td style="border:1px solid #e5e7eb;border-radius:8px;padding:10px;text-align:center">'
+            f'<div style="font-size:22px;font-weight:bold;color:{color}">{n}</div>'
+            f'<div style="font-size:12px;color:#555">{label}</div></td>'
+        )
+
+    body = (
+        '<table cellspacing="6" style="width:100%;margin-top:8px"><tr>'
+        + stat(len(done_week), "Đã xong tuần này", "#16a34a")
+        + stat(len(overdue), "Đang quá hạn", "#dc2626")
+        + stat(len(next_week), "Hạn trong 7 ngày tới", "#ea580c")
+        + stat(len(open_all), "Tổng việc chưa xong", "#111")
+        + "</tr></table>"
+    )
+    summary = group_summary(done_week)
+    if done_week:
+        body += '<h3 style="color:#16a34a;margin:20px 0 8px">✅ Đã xong tuần này</h3>'
+        if summary:
+            body += f'<div style="font-size:13px;color:#555;margin-bottom:6px">Theo nhóm: {summary}</div>'
+        body += "".join(
+            f'<div style="font-size:14px;padding:2px 0">✓ {html.escape(t.get("title", ""))}'
+            + (f' <span style="color:#888">· {html.escape(group_of(t))}</span>' if group_of(t) else "")
+            + "</div>"
+            for t in done_week
+        )
+    if overdue:
+        body += '<h3 style="color:#dc2626;margin:20px 0 8px">🔴 Đang quá hạn</h3>'
+        body += "".join(task_html(t, now, site_url) for t in overdue)
+    if next_week:
+        body += '<h3 style="color:#ea580c;margin:20px 0 8px">📅 Tuần tới</h3>'
+        body += "".join(task_html(t, now, site_url) for t in next_week)
+    subject = f"[Nhắc việc] Báo cáo tuần {(now - timedelta(days=6)):%d/%m}–{now:%d/%m}: xong {len(done_week)}, quá hạn {len(overdue)}"
+    return subject, wrap("Báo cáo tuần", body, site_url)
+
+
+def pick_mode(now):
+    mode = (os.environ.get("MODE") or "auto").strip().lower()
+    if mode in ("full", "urgent", "weekly"):
+        return mode
+    if now.hour < 9:
+        return "full"
+    if now.weekday() == 6 and 20 <= now.hour < 22:
+        return "weekly"
+    return "urgent"
+
+
+# ---------------------------------------------------------------- gửi
 
 def check_secrets():
     """Làm sạch và kiểm tra secrets, báo lỗi dễ hiểu mà không in giá trị ra log."""
@@ -177,36 +402,13 @@ def check_secrets():
     return user, password, to
 
 
-def main():
-    dry_run = "--dry-run" in sys.argv
-    today = datetime.now(TZ).date()
-    groups = classify(load_tasks(), today)
-    pending = sum(len(g) for g in groups.values())
-    if pending == 0:
-        print("Không còn việc nào chưa xong, không gửi mail.")
-        return
-
-    urgent = len(groups["overdue"]) + len(groups["today"]) + len(groups["soon"])
-    subject = f"[Nhắc việc] {today.strftime('%d/%m')}: {pending} việc chưa xong"
-    if groups["overdue"]:
-        subject += f", {len(groups['overdue'])} quá hạn"
-    elif urgent:
-        subject += f", {urgent} việc gấp"
-
-    body = render(groups, today, os.environ.get("SITE_URL", ""))
-    if dry_run:
-        print(subject)
-        print(body)
-        return
-
+def send(subject, body):
     user, password, to = check_secrets()
-
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"Nhắc việc <{user}>"
     msg["To"] = to
     msg.attach(MIMEText(body, "html", "utf-8"))
-
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as s:
         try:
             s.login(user, password)
@@ -218,8 +420,30 @@ def main():
                 "(3) tài khoản đã bật xác minh 2 bước."
             )
             sys.exit(1)
-        s.sendmail(user, [a.strip() for a in to.split(",")], msg.as_string())
+        s.sendmail(user, [a for a in to.split(",") if a], msg.as_string())
     print(f"Đã gửi mail tới {to}: {subject}")
+
+
+def main():
+    dry_run = "--dry-run" in sys.argv
+    now = datetime.now(TZ)
+    if os.environ.get("NOW"):  # chỉ dùng khi chạy thử
+        now = datetime.fromisoformat(os.environ["NOW"]).replace(tzinfo=TZ)
+    site_url = (os.environ.get("SITE_URL") or "").strip()
+    tasks = load_tasks()
+    mode = pick_mode(now)
+    print(f"Chế độ: {mode} ({now:%A %d/%m %H:%M})")
+
+    built = {"full": build_full, "urgent": build_urgent, "weekly": build_weekly}[mode](tasks, now, site_url)
+    if not built:
+        print("Không có gì cần nhắc ở chế độ này, không gửi mail.")
+        return
+    subject, body = built
+    if dry_run:
+        print(subject)
+        print(body)
+        return
+    send(subject, body)
 
 
 if __name__ == "__main__":

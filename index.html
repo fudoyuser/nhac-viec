@@ -2,92 +2,164 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Nhắc việc</title>
+<meta name="theme-color" content="#2563eb">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Nhắc việc">
 <style>
   :root {
-    --bg: #f6f7f9; --card: #fff; --text: #111827; --muted: #6b7280; --line: #e5e7eb;
+    --bg: #f6f7f9; --card: #fff; --text: #111827; --muted: #6b7280; --line: #e5e7eb; --soft: #eef2ff; --soft-text: #3730a3;
     --primary: #2563eb; --red: #dc2626; --orange: #ea580c; --yellow: #ca8a04; --green: #16a34a;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #0f1115; --card: #181b21; --text: #e5e7eb; --muted: #9ca3af; --line: #2a2f38; }
+    :root { --bg: #0f1115; --card: #181b21; --text: #e5e7eb; --muted: #9ca3af; --line: #2a2f38; --soft: #1e2440; --soft-text: #c7d2fe; }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; }
-  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 20px 16px 60px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   h1 { margin: 0; font-size: 24px; }
-  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 7px 12px; border-radius: 8px; cursor: pointer; }
+  button, select { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 7px 12px; border-radius: 8px; cursor: pointer; }
   button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
   button.danger { color: var(--red); }
+  button.sm { padding: 4px 10px; font-size: 13px; }
   button:disabled { opacity: .5; cursor: default; }
   input, textarea { font: inherit; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+  select { width: 100%; background: var(--bg); }
   label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-top: 12px; }
-  .stats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
-  .stat { flex: 1 1 120px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
+  @media (max-width: 520px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
   .stat b { display: block; font-size: 22px; }
   .stat span { font-size: 13px; color: var(--muted); }
   .task { border-left: 4px solid var(--muted); }
   .task.overdue { border-left-color: var(--red); }
   .task.today { border-left-color: var(--orange); }
   .task.soon { border-left-color: var(--yellow); }
-  .task.done { border-left-color: var(--green); opacity: .65; }
+  .task.done { border-left-color: var(--green); opacity: .7; }
   .task.done .title { text-decoration: line-through; }
   .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
   .title { font-weight: 600; word-break: break-word; }
   .meta { font-size: 13px; color: var(--muted); }
+  .meta .late { color: var(--red); font-weight: 600; }
   .note { font-size: 14px; margin-top: 4px; white-space: pre-wrap; word-break: break-word; }
-  .prog { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
-  .prog input { flex: 1; padding: 0; }
-  .prog span { width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
+  .tag { display: inline-block; font-size: 12px; padding: 0 8px; border-radius: 999px; background: var(--soft); color: var(--soft-text); margin-right: 4px; vertical-align: 1px; font-weight: 500; }
+  .tag.high { background: #fee2e2; color: #991b1b; }
+  .tag.low { background: var(--line); color: var(--muted); }
   .actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .progress { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .pbar { flex: 1 1 120px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+  .pbar i { display: block; height: 100%; background: var(--primary); border-radius: 4px; }
+  .pval { width: 40px; text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; }
+  .checklist { list-style: none; padding: 0; margin: 8px 0 0; }
+  .checklist li { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; font-size: 14px; cursor: pointer; }
+  .checklist input { width: 18px; height: 18px; margin: 2px 0 0; flex-shrink: 0; cursor: pointer; }
+  .checklist li.ok span { text-decoration: line-through; color: var(--muted); }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
-  @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 12px; }
+  @media (max-width: 520px) { .grid2, .grid3 { grid-template-columns: 1fr 1fr; } }
   .bar { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
   .msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 14px; display: none; }
   .msg.show { display: block; }
   .msg.err { background: #fee2e2; color: #991b1b; }
   .msg.ok { background: #dcfce7; color: #166534; }
-  .hidden { display: none; }
+  .hidden { display: none !important; }
   .empty { text-align: center; color: var(--muted); padding: 30px 0; }
-  .filter { display: flex; gap: 6px; margin-top: 16px; flex-wrap: wrap; }
-  .filter button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
-  small.help { color: var(--muted); font-size: 12px; }
-  .groups { display: flex; gap: 6px; margin-top: 16px; overflow-x: auto; padding-bottom: 2px; }
-  .groups button { white-space: nowrap; border-radius: 999px; font-size: 14px; padding: 5px 12px; }
-  .groups button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
-  .groups button .n { opacity: .7; margin-left: 4px; }
+  .chips { display: flex; gap: 6px; margin-top: 12px; overflow-x: auto; padding-bottom: 2px; }
+  .chips button { white-space: nowrap; border-radius: 999px; font-size: 14px; padding: 5px 12px; }
+  .chips button.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .chips.groups button.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .chips button .n { opacity: .7; margin-left: 4px; }
+  .tools { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; margin-top: 14px; }
+  .tools select { width: auto; background: var(--card); }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; }
+  .seg button.on { background: var(--primary); color: #fff; }
+  @media (max-width: 520px) { .tools { grid-template-columns: 1fr 1fr; } .tools input { grid-column: 1 / -1; } }
   .ghead { display: flex; justify-content: space-between; align-items: baseline; margin: 22px 0 -4px; }
   .ghead b { font-size: 16px; }
   .ghead span { font-size: 13px; color: var(--muted); }
+  small.help { color: var(--muted); font-size: 12px; }
+  /* Lịch */
+  .cal-head { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
+  .cal-head b { font-size: 17px; }
+  .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
+  .cal .dow { text-align: center; font-size: 12px; color: var(--muted); padding: 2px 0; }
+  .cal .day { min-height: 64px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 4px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 2px; overflow: hidden; min-width: 0; }
+  .cal .day.out { opacity: .4; }
+  .cal .day.today { border-color: var(--primary); }
+  .cal .day.sel { outline: 2px solid var(--primary); }
+  .cal .num { font-size: 13px; font-weight: 600; }
+  .cal .ev { font-size: 11px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid var(--muted); padding-left: 3px; max-width: 100%; }
+  .cal .dots { display: none; gap: 3px; flex-wrap: wrap; }
+  .cal .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .cal .ev.s-overdue { border-left-color: var(--red); }
+  .cal .ev.s-today { border-left-color: var(--orange); }
+  .cal .ev.s-soon { border-left-color: var(--yellow); }
+  .cal .ev.s-done { border-left-color: var(--green); }
+  .cal .dots i.s-overdue { background: var(--red); }
+  .cal .dots i.s-today { background: var(--orange); }
+  .cal .dots i.s-soon { background: var(--yellow); }
+  .cal .dots i.s-done { background: var(--green); }
+  @media (max-width: 520px) { .cal .ev { display: none; } .cal .dots { display: flex; } .cal .day { min-height: 48px; } }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>📋 Nhắc việc</h1>
-    <div style="display:flex;gap:6px">
-      <button class="primary" id="btnAdd">+ Thêm việc</button>
-    </div>
+    <button class="primary" id="btnAdd">+ Thêm việc</button>
   </header>
 
   <div id="msg" class="msg"></div>
-
 
   <div id="form" class="card hidden">
     <b id="formTitle">Thêm việc</b>
     <label>Tên công việc</label>
     <input id="fTitle" maxlength="200">
-    <label>Nhóm</label>
-    <input id="fGroup" maxlength="50" list="groupList" placeholder="Ví dụ: Công ty, Cá nhân, Học tập… (bỏ trống nếu không cần)">
-    <datalist id="groupList"></datalist>
     <div class="grid2">
-      <div><label>Deadline</label><input id="fDeadline" type="date"></div>
-      <div><label>Nhắc gấp trước (ngày)</label><input id="fRemind" type="number" min="0" max="60" value="3"></div>
+      <div>
+        <label>Nhóm</label>
+        <input id="fGroup" maxlength="50" list="groupList" placeholder="Công ty, Cá nhân…">
+        <datalist id="groupList"></datalist>
+      </div>
+      <div>
+        <label>Ưu tiên</label>
+        <select id="fPriority">
+          <option value="high">🔥 Cao</option>
+          <option value="normal" selected>Bình thường</option>
+          <option value="low">Thấp</option>
+        </select>
+      </div>
     </div>
-    <label>Tiến độ: <span id="fProgVal">0</span>%</label>
-    <input id="fProgress" type="range" min="0" max="100" step="5" value="0" style="padding:0">
+    <div class="grid3">
+      <div><label>Deadline</label><input id="fDeadline" type="date"></div>
+      <div><label>Giờ (tùy chọn)</label><input id="fTime" type="time"></div>
+      <div>
+        <label>Lặp lại</label>
+        <select id="fRepeat">
+          <option value="">Không</option>
+          <option value="daily">Hằng ngày</option>
+          <option value="weekly">Hằng tuần</option>
+          <option value="monthly">Hằng tháng</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid2">
+      <div><label>Nhắc gấp trước (ngày)</label><input id="fRemind" type="number" min="0" max="60" value="3"></div>
+      <div>
+        <label>Tiến độ: <span id="fProgVal">0</span>%</label>
+        <input id="fProgress" type="range" min="0" max="100" step="5" value="0" style="padding:0;margin-top:8px">
+      </div>
+    </div>
+    <label>Việc con (mỗi dòng một mục, không bắt buộc)</label>
+    <textarea id="fItems" rows="3" placeholder="Thu thập số liệu&#10;Viết bản nháp&#10;Gửi sếp duyệt"></textarea>
+    <small class="help">Khi có việc con, tiến độ tự tính theo số mục đã tích. Ghi “[x] ” ở đầu dòng để đánh dấu đã xong.</small>
     <label>Ghi chú</label>
     <textarea id="fNote" rows="2"></textarea>
     <div class="bar">
@@ -96,13 +168,31 @@
     </div>
   </div>
 
-  <div class="groups" id="groups"></div>
+  <div class="chips groups" id="groups"></div>
   <div class="stats" id="stats"></div>
-  <div class="filter" id="filter">
+
+  <div class="tools">
+    <input id="search" type="search" placeholder="🔍 Tìm việc…">
+    <select id="sort" aria-label="Sắp xếp">
+      <option value="urgent">Sắp xếp: Mức gấp</option>
+      <option value="priority">Sắp xếp: Ưu tiên</option>
+      <option value="deadline">Sắp xếp: Deadline</option>
+      <option value="progress">Sắp xếp: Tiến độ</option>
+      <option value="title">Sắp xếp: Tên A–Z</option>
+    </select>
+    <div class="seg" id="view">
+      <button data-v="list" class="on">Danh sách</button>
+      <button data-v="cal">Lịch</button>
+    </div>
+  </div>
+
+  <div class="chips" id="filter">
     <button data-f="open" class="on">Chưa xong</button>
     <button data-f="all">Tất cả</button>
     <button data-f="done">Đã xong</button>
   </div>
+
+  <div id="calendar" class="hidden"></div>
   <div id="list"></div>
 </div>
 
@@ -114,23 +204,45 @@
   const DATA_REPO = "__DATA_REPO__";
   const TOKEN_B64 = "__DATA_TOKEN_B64__";
   const configured = !DATA_REPO.startsWith("__") && !TOKEN_B64.startsWith("__");
-  const cfg = { token: configured ? atob(TOKEN_B64) : "" };
+  const token = configured ? atob(TOKEN_B64) : "";
+
+  const NO_GROUP = "Chưa phân nhóm";
+  const REPEAT_TEXT = { daily: "Hằng ngày", weekly: "Hằng tuần", monthly: "Hằng tháng" };
+  const PRIO_RANK = { high: 0, normal: 1, low: 2 };
+  const STATUS_RANK = { overdue: 0, today: 1, soon: 2, later: 3, done: 4 };
+
+  const pref = {
+    get(k, d) { try { return localStorage.getItem("nv_" + k) || d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem("nv_" + k, v); } catch {} },
+  };
 
   let tasks = [];
   let sha = null;
   let editingId = null;
-  let filter = "open";
   let saving = false;
-  const NO_GROUP = "Chưa phân nhóm";
-  let group = "*"; // "*" = tất cả nhóm
-  try { group = localStorage.getItem("nv_group") || "*"; } catch {}
+  let filter = "open";
+  let group = pref.get("group", "*");
+  let sortBy = pref.get("sort", "urgent");
+  let view = pref.get("view", "list");
+  let query = "";
+  let calMonth = null; // ngày 1 của tháng đang xem
+  let calSel = null; // "YYYY-MM-DD"
 
+  // ---------- Tiện ích ----------
   function msg(text, type = "ok") {
     const el = $("msg");
     el.textContent = text;
     el.className = "msg show " + type;
-    if (type === "ok") setTimeout(() => el.classList.remove("show"), 2500);
+    clearTimeout(msg.t);
+    if (type === "ok") msg.t = setTimeout(() => el.classList.remove("show"), 3000);
   }
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const pad = (n) => String(n).padStart(2, "0");
+  const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parseYmd = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const todayStr = () => ymd(new Date());
+  const fmt = (s) => (s ? s.split("-").reverse().join("/") : "");
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
   const b64encode = (str) => {
     const bytes = new TextEncoder().encode(str);
@@ -140,50 +252,128 @@
   };
   const b64decode = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\n/g, "")), (c) => c.charCodeAt(0)));
 
-  const apiUrl = () => `https://api.github.com/repos/${DATA_REPO}/contents/tasks.json`;
-  const headers = () => ({ Accept: "application/vnd.github+json", ...(cfg.token ? { Authorization: "Bearer " + cfg.token } : {}) });
-
-  async function load() {
-    if (!configured) {
-      msg("Website chưa được cấu hình: thiếu secret DATA_TOKEN hoặc chưa chạy workflow dựng website.", "err");
-      return render();
-    }
-    try {
-      const r = await fetch(apiUrl() + "?t=" + Date.now(), { headers: headers(), cache: "no-store" });
-      if (r.status === 404) {
-        tasks = [];
-        sha = null; // chưa có file, lần lưu đầu tiên sẽ tạo
-      } else if (!r.ok) {
-        throw new Error("GitHub API " + r.status);
-      } else {
-        const j = await r.json();
-        sha = j.sha;
-        tasks = JSON.parse(b64decode(j.content));
-      }
-    } catch (e) {
-      msg("Không tải được danh sách việc: " + e.message, "err");
-      tasks = [];
-    }
-    render();
+  // ---------- Quy tắc của một việc ----------
+  const items = (t) => (Array.isArray(t.items) ? t.items : []);
+  function progressOf(t) {
+    const it = items(t);
+    if (it.length) return Math.round((it.filter((i) => i.done).length / it.length) * 100);
+    return Math.max(0, Math.min(100, +t.progress || 0));
+  }
+  const isDone = (t) => progressOf(t) >= 100;
+  function remindOf(t) {
+    const v = t.remindBefore;
+    return v === undefined || v === null || v === "" || isNaN(+v) ? 3 : Math.max(0, +v);
+  }
+  const groupOf = (t) => (t.group || "").trim() || NO_GROUP;
+  const prioOf = (t) => (t.priority in PRIO_RANK ? t.priority : "normal");
+  function daysLeft(t) {
+    if (!t.deadline) return null;
+    return Math.round((parseYmd(t.deadline) - parseYmd(todayStr())) / 86400000);
+  }
+  function timePassed(t) {
+    if (!t.time) return false;
+    const [h, m] = t.time.split(":").map(Number);
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes() > h * 60 + m;
+  }
+  function statusOf(t) {
+    if (isDone(t)) return "done";
+    const d = daysLeft(t);
+    if (d === null) return "later";
+    if (d < 0) return "overdue";
+    if (d === 0) return timePassed(t) ? "overdue" : "today";
+    if (d <= remindOf(t)) return "soon";
+    return "later";
+  }
+  function whenHtml(t) {
+    if (isDone(t)) return "Đã xong";
+    const d = daysLeft(t);
+    if (d === null) return "Không có deadline";
+    const at = t.time ? ` ${t.time}` : "";
+    if (d < 0) return `<span class="late">Quá hạn ${-d} ngày</span> · ${fmt(t.deadline)}${at}`;
+    if (d === 0) return timePassed(t) ? `<span class="late">Quá hạn từ ${t.time} hôm nay</span>` : `Hạn hôm nay${at}`;
+    return `Còn ${d} ngày · ${fmt(t.deadline)}${at}`;
   }
 
-  async function save(note) {
-    if (!configured) {
-      msg("Website chưa được cấu hình nên không lưu được.", "err");
-      return false;
+  function addPeriod(s, repeat) {
+    const d = parseYmd(s);
+    if (repeat === "daily") d.setDate(d.getDate() + 1);
+    else if (repeat === "weekly") d.setDate(d.getDate() + 7);
+    else if (repeat === "monthly") {
+      const day = d.getDate();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + 1);
+      d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
     }
+    return ymd(d);
+  }
+
+  // Chạy sau mỗi thay đổi: ghi thời điểm xong, tạo kỳ tiếp theo cho việc lặp lại
+  function finalize(list) {
+    const now = new Date().toISOString();
+    const today = todayStr();
+    for (const t of [...list]) {
+      if (isDone(t)) {
+        if (!t.doneAt) t.doneAt = now;
+        if (REPEAT_TEXT[t.repeat] && !t.nextCreated) {
+          t.nextCreated = true;
+          let next = addPeriod(t.deadline || today, t.repeat);
+          while (next < today) next = addPeriod(next, t.repeat);
+          list.push({
+            id: uid(), title: t.title, group: t.group || "", priority: prioOf(t), repeat: t.repeat,
+            deadline: next, time: t.time || "", remindBefore: remindOf(t), progress: 0,
+            items: items(t).map((i) => ({ text: i.text, done: false })), note: t.note || "", createdAt: now,
+          });
+        }
+      } else {
+        delete t.doneAt;
+      }
+    }
+  }
+
+  // ---------- Đọc / ghi GitHub ----------
+  const apiUrl = () => `https://api.github.com/repos/${DATA_REPO}/contents/tasks.json`;
+  const headers = () => ({ Accept: "application/vnd.github+json", Authorization: "Bearer " + token });
+
+  async function fetchRemote() {
+    const r = await fetch(apiUrl() + "?t=" + Date.now(), { headers: headers(), cache: "no-store" });
+    if (r.status === 404) { tasks = []; sha = null; return; }
+    if (!r.ok) throw new Error("GitHub API " + r.status);
+    const j = await r.json();
+    sha = j.sha;
+    tasks = JSON.parse(b64decode(j.content));
+  }
+
+  async function put(label) {
+    const body = { message: label, content: b64encode(JSON.stringify(tasks, null, 2) + "\n"), ...(sha ? { sha } : {}) };
+    const r = await fetch(apiUrl(), { method: "PUT", headers: { ...headers(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (r.status === 409 || r.status === 422) return "conflict";
+    if (!r.ok) throw new Error("GitHub API " + r.status + " " + ((await r.json().catch(() => ({}))).message || ""));
+    sha = (await r.json()).content.sha;
+    return "ok";
+  }
+
+  // Áp dụng thay đổi `fn` rồi lưu. Nếu máy khác vừa sửa: tải bản mới, áp lại `fn`, lưu lại.
+  // Nếu vẫn thất bại: đưa màn hình về đúng dữ liệu trên GitHub, không để hiện thay đổi chưa lưu.
+  async function mutate(fn, label, okText = "Đã lưu ✓") {
+    if (!configured) { msg("Website chưa được cấu hình nên không lưu được.", "err"); return false; }
+    if (saving) return false;
+    const backup = JSON.stringify(tasks);
     saving = true;
-    render();
+    fn(tasks); finalize(tasks); render();
     try {
-      const body = { message: note, content: b64encode(JSON.stringify(tasks, null, 2) + "\n"), ...(sha ? { sha } : {}) };
-      const r = await fetch(apiUrl(), { method: "PUT", headers: { ...headers(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (r.status === 409) throw new Error("File vừa bị thay đổi ở nơi khác, tải lại trang rồi thử lại");
-      if (!r.ok) throw new Error("GitHub API " + r.status + " " + ((await r.json().catch(() => ({}))).message || ""));
-      sha = (await r.json()).content.sha;
-      msg("Đã lưu ✓");
+      let res = await put(label);
+      if (res === "conflict") {
+        await fetchRemote();
+        fn(tasks); finalize(tasks); render();
+        res = await put(label);
+        if (res === "conflict") throw new Error("dữ liệu đang được sửa ở nơi khác, thử lại sau ít giây");
+      }
+      if (okText) msg(okText);
       return true;
     } catch (e) {
-      msg("Lưu thất bại: " + e.message, "err");
+      try { await fetchRemote(); } catch { tasks = JSON.parse(backup); }
+      msg("Chưa lưu được: " + e.message + ". Màn hình đã trở về dữ liệu đã lưu.", "err");
       return false;
     } finally {
       saving = false;
@@ -191,40 +381,34 @@
     }
   }
 
-  function todayStr() {
-    const d = new Date();
-    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-  }
-  function daysLeft(dl) {
-    if (!dl) return null;
-    return Math.round((new Date(dl + "T00:00:00") - new Date(todayStr() + "T00:00:00")) / 86400000);
-  }
-  function statusOf(t) {
-    if (+t.progress >= 100) return "done";
-    const d = daysLeft(t.deadline);
-    if (d === null) return "later";
-    if (d < 0) return "overdue";
-    if (d === 0) return "today";
-    if (d <= (+t.remindBefore || 3)) return "soon";
-    return "later";
-  }
-  function whenText(t) {
-    if (+t.progress >= 100) return "Đã xong";
-    const d = daysLeft(t.deadline);
-    if (d === null) return "Không có deadline";
-    if (d < 0) return `Quá hạn ${-d} ngày`;
-    if (d === 0) return "Hạn hôm nay";
-    return `Còn ${d} ngày`;
-  }
-  const fmt = (dl) => (dl ? dl.split("-").reverse().join("/") : "");
-  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const byId = (list, id) => list.find((x) => x.id === id);
 
-  const groupOf = (t) => (t.group || "").trim() || NO_GROUP;
+  // ---------- Hiển thị ----------
   function groupNames() {
     const names = [...new Set(tasks.map(groupOf))];
     return names.sort((a, b) => (a === NO_GROUP) - (b === NO_GROUP) || a.localeCompare(b, "vi"));
   }
-  const openCount = (list) => list.filter((t) => statusOf(t) !== "done").length;
+  const openCount = (list) => list.filter((t) => !isDone(t)).length;
+
+  function matches(t) {
+    if (!query) return true;
+    const hay = [t.title, t.note, t.group, ...items(t).map((i) => i.text)].join(" ").toLowerCase();
+    return query.toLowerCase().split(/\s+/).every((w) => hay.includes(w));
+  }
+
+  function compare(a, b) {
+    const dl = (t) => (t.deadline || "9999-99-99") + (t.time || "99:99");
+    const urgent = () => STATUS_RANK[statusOf(a)] - STATUS_RANK[statusOf(b)];
+    const prio = () => PRIO_RANK[prioOf(a)] - PRIO_RANK[prioOf(b)];
+    const date = () => dl(a).localeCompare(dl(b));
+    switch (sortBy) {
+      case "priority": return prio() || urgent() || date();
+      case "deadline": return isDone(a) - isDone(b) || date() || prio();
+      case "progress": return progressOf(a) - progressOf(b) || urgent() || date();
+      case "title": return a.title.localeCompare(b.title, "vi");
+      default: return urgent() || prio() || date();
+    }
+  }
 
   function renderGroups(names) {
     if (group !== "*" && !names.includes(group)) group = "*";
@@ -232,149 +416,237 @@
       `<button data-g="${esc(key)}" class="${group === key ? "on" : ""}">${esc(label)}<span class="n">${n}</span></button>`;
     $("groups").innerHTML =
       names.length > 1 || (names.length === 1 && names[0] !== NO_GROUP)
-        ? chip("*", "Tất cả nhóm", openCount(tasks)) +
-          names.map((g) => chip(g, g, openCount(tasks.filter((t) => groupOf(t) === g)))).join("")
+        ? chip("*", "Tất cả nhóm", openCount(tasks)) + names.map((g) => chip(g, g, openCount(tasks.filter((t) => groupOf(t) === g)))).join("")
         : "";
     $("groupList").innerHTML = names.filter((g) => g !== NO_GROUP).map((g) => `<option value="${esc(g)}">`).join("");
   }
 
-  function card(t) {
+  function card(t, showGroup) {
+    const s = statusOf(t);
+    const p = progressOf(t);
+    const it = items(t);
+    const dis = saving ? "disabled" : "";
+    const tags =
+      (prioOf(t) === "high" ? '<span class="tag high">🔥 Cao</span>' : prioOf(t) === "low" ? '<span class="tag low">Thấp</span>' : "") +
+      (showGroup && t.group ? `<span class="tag">${esc(t.group)}</span>` : "") +
+      (REPEAT_TEXT[t.repeat] ? `<span class="tag">🔁 ${REPEAT_TEXT[t.repeat]}</span>` : "");
+    const quick = it.length
+      ? ""
+      : isDone(t)
+        ? `<button class="sm" data-act="reopen" ${dis}>Mở lại</button>`
+        : `<button class="sm" data-act="minus" ${dis} aria-label="Giảm 10%">−10%</button>
+           <button class="sm" data-act="plus" ${dis} aria-label="Tăng 10%">+10%</button>
+           <button class="sm" data-act="done" ${dis}>✓ Xong</button>`;
     return `
-        <div class="card task ${statusOf(t)}" data-id="${esc(t.id)}">
-          <div class="row">
-            <div>
-              <div class="title">${esc(t.title)}</div>
-              <div class="meta">${whenText(t)}${t.deadline ? " · " + fmt(t.deadline) : ""}</div>
-            </div>
-            <div class="actions">
-              <button data-act="edit" ${saving ? "disabled" : ""}>Sửa</button>
-              <button data-act="del" class="danger" ${saving ? "disabled" : ""}>Xóa</button>
-            </div>
+      <div class="card task ${s}" data-id="${esc(t.id)}">
+        <div class="row">
+          <div>
+            <div class="title">${esc(t.title)}</div>
+            ${tags ? `<div style="margin-top:2px">${tags}</div>` : ""}
+            <div class="meta">${whenHtml(t)}</div>
           </div>
-          ${t.note ? `<div class="note">${esc(t.note)}</div>` : ""}
-          <div class="prog">
-            <input type="range" min="0" max="100" step="5" value="${+t.progress || 0}" data-act="prog" ${saving ? "disabled" : ""}>
-            <span>${+t.progress || 0}%</span>
+          <div class="actions">
+            <button class="sm" data-act="edit" ${dis}>Sửa</button>
+            <button class="sm danger" data-act="del" ${dis}>Xóa</button>
           </div>
-        </div>`;
+        </div>
+        ${t.note ? `<div class="note">${esc(t.note)}</div>` : ""}
+        ${it.length ? `<ul class="checklist">${it.map((i, n) => `
+          <li class="${i.done ? "ok" : ""}" data-act="item" data-n="${n}">
+            <input type="checkbox" ${i.done ? "checked" : ""} ${dis} tabindex="-1"><span>${esc(i.text)}</span>
+          </li>`).join("")}</ul>` : ""}
+        <div class="progress">
+          <div class="pbar"><i style="width:${p}%;background:${p >= 100 ? "var(--green)" : "var(--primary)"}"></i></div>
+          <span class="pval">${p}%</span>
+          ${quick}
+        </div>
+      </div>`;
+  }
+
+  function visibleTasks() {
+    return (group === "*" ? tasks : tasks.filter((t) => groupOf(t) === group)).filter(matches);
   }
 
   function render() {
     const names = groupNames();
     renderGroups(names);
-    const inGroup = group === "*" ? tasks : tasks.filter((t) => groupOf(t) === group);
+    const base = visibleTasks();
 
-    const counts = { open: 0, overdue: 0, urgent: 0, done: 0 };
-    inGroup.forEach((t) => {
+    const c = { open: 0, overdue: 0, urgent: 0, done: 0 };
+    base.forEach((t) => {
       const s = statusOf(t);
-      if (s === "done") counts.done++;
-      else counts.open++;
-      if (s === "overdue") counts.overdue++;
-      if (s === "today" || s === "soon") counts.urgent++;
+      s === "done" ? c.done++ : c.open++;
+      if (s === "overdue") c.overdue++;
+      if (s === "today" || s === "soon") c.urgent++;
     });
     $("stats").innerHTML = `
-      <div class="stat"><b>${counts.open}</b><span>Chưa xong</span></div>
-      <div class="stat"><b style="color:var(--red)">${counts.overdue}</b><span>Quá hạn</span></div>
-      <div class="stat"><b style="color:var(--orange)">${counts.urgent}</b><span>Sắp đến hạn</span></div>
-      <div class="stat"><b style="color:var(--green)">${counts.done}</b><span>Đã xong</span></div>`;
+      <div class="stat"><b>${c.open}</b><span>Chưa xong</span></div>
+      <div class="stat"><b style="color:var(--red)">${c.overdue}</b><span>Quá hạn</span></div>
+      <div class="stat"><b style="color:var(--orange)">${c.urgent}</b><span>Sắp đến hạn</span></div>
+      <div class="stat"><b style="color:var(--green)">${c.done}</b><span>Đã xong</span></div>`;
 
-    const order = { overdue: 0, today: 1, soon: 2, later: 3, done: 4 };
-    const shown = inGroup
-      .filter((t) => filter === "all" || (filter === "done" ? statusOf(t) === "done" : statusOf(t) !== "done"))
-      .sort((a, b) => order[statusOf(a)] - order[statusOf(b)] || (a.deadline || "9999").localeCompare(b.deadline || "9999"));
+    $("filter").classList.toggle("hidden", view === "cal");
+    $("calendar").classList.toggle("hidden", view !== "cal");
+    if (view === "cal") return renderCalendar(base);
+
+    const shown = base
+      .filter((t) => filter === "all" || (filter === "done" ? isDone(t) : !isDone(t)))
+      .sort(compare);
 
     if (!shown.length) {
-      $("list").innerHTML = `<div class="empty">${filter === "done" ? "Chưa có việc nào xong." : "Không có việc nào. Bấm “+ Thêm việc” để bắt đầu."}</div>`;
+      $("list").innerHTML = `<div class="empty">${query ? "Không tìm thấy việc nào khớp." : filter === "done" ? "Chưa có việc nào xong." : "Không có việc nào. Bấm “+ Thêm việc” để bắt đầu."}</div>`;
       return;
     }
-    // Xem "Tất cả nhóm" và có từ 2 nhóm trở lên: chia thành từng mục theo nhóm
-    if (group === "*" && names.length > 1) {
-      $("list").innerHTML = names
-        .map((g) => {
-          const items = shown.filter((t) => groupOf(t) === g);
-          if (!items.length) return "";
-          const late = items.filter((t) => statusOf(t) === "overdue").length;
-          return `<div class="ghead"><b>${esc(g)}</b><span>${items.length} việc${late ? ` · <span style="color:var(--red)">${late} quá hạn</span>` : ""}</span></div>` +
-            items.map(card).join("");
-        })
-        .join("");
+    if (group === "*" && names.length > 1 && !query) {
+      $("list").innerHTML = names.map((g) => {
+        const list = shown.filter((t) => groupOf(t) === g);
+        if (!list.length) return "";
+        const late = list.filter((t) => statusOf(t) === "overdue").length;
+        return `<div class="ghead"><b>${esc(g)}</b><span>${list.length} việc${late ? ` · <span style="color:var(--red)">${late} quá hạn</span>` : ""}</span></div>` +
+          list.map((t) => card(t, false)).join("");
+      }).join("");
     } else {
-      $("list").innerHTML = shown.map(card).join("");
+      $("list").innerHTML = shown.map((t) => card(t, group === "*")).join("");
     }
   }
 
+  function renderCalendar(base) {
+    if (!calMonth) { const n = new Date(); calMonth = new Date(n.getFullYear(), n.getMonth(), 1); }
+    const y = calMonth.getFullYear(), m = calMonth.getMonth();
+    const start = new Date(y, m, 1);
+    start.setDate(1 - ((start.getDay() + 6) % 7)); // bắt đầu từ thứ Hai
+    const byDay = {};
+    base.filter((t) => t.deadline).forEach((t) => (byDay[t.deadline] ||= []).push(t));
+    Object.values(byDay).forEach((l) => l.sort(compare));
+    const today = todayStr();
+    let cells = "";
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      const key = ymd(d);
+      const list = byDay[key] || [];
+      cells += `<button class="day ${d.getMonth() !== m ? "out" : ""} ${key === today ? "today" : ""} ${key === calSel ? "sel" : ""}" data-day="${key}">
+        <span class="num">${d.getDate()}</span>
+        ${list.slice(0, 3).map((t) => `<span class="ev s-${statusOf(t)}">${esc(t.title)}</span>`).join("")}
+        ${list.length > 3 ? `<span class="ev" style="border:0">+${list.length - 3} việc</span>` : ""}
+        <span class="dots">${list.slice(0, 6).map((t) => `<i class="s-${statusOf(t)}"></i>`).join("")}</span>
+      </button>`;
+    }
+    $("calendar").innerHTML = `
+      <div class="cal-head">
+        <button class="sm" data-cal="-1" aria-label="Tháng trước">‹</button>
+        <b>Tháng ${m + 1}/${y}</b>
+        <span style="display:flex;gap:6px">
+          <button class="sm" data-cal="0">Hôm nay</button>
+          <button class="sm" data-cal="1" aria-label="Tháng sau">›</button>
+        </span>
+      </div>
+      <div class="cal">${["T2", "T3", "T4", "T5", "T6", "T7", "CN"].map((d) => `<div class="dow">${d}</div>`).join("")}${cells}</div>`;
+
+    const sel = calSel || today;
+    const dayList = (byDay[sel] || []).slice();
+    const noDl = base.filter((t) => !t.deadline && !isDone(t));
+    $("list").innerHTML =
+      `<div class="ghead"><b>${sel === today ? "Hôm nay" : "Ngày " + fmt(sel)}</b><span>${dayList.length} việc</span></div>` +
+      (dayList.length ? dayList.map((t) => card(t, true)).join("") : `<div class="empty">Không có việc nào hết hạn ngày này.</div>`) +
+      (noDl.length ? `<div class="ghead"><b>Không có deadline</b><span>${noDl.length} việc</span></div>` + noDl.sort(compare).map((t) => card(t, true)).join("") : "");
+  }
+
+  // ---------- Form ----------
   function openForm(t) {
     editingId = t ? t.id : null;
     $("formTitle").textContent = t ? "Sửa việc" : "Thêm việc";
     $("fTitle").value = t?.title || "";
     $("fGroup").value = t ? t.group || "" : group !== "*" && group !== NO_GROUP ? group : "";
-    $("fDeadline").value = t?.deadline || "";
-    $("fRemind").value = t?.remindBefore ?? 3;
-    $("fProgress").value = t?.progress ?? 0;
-    $("fProgVal").textContent = $("fProgress").value;
+    $("fPriority").value = t ? prioOf(t) : "normal";
+    $("fDeadline").value = t?.deadline || (view === "cal" && calSel ? calSel : "");
+    $("fTime").value = t?.time || "";
+    $("fRepeat").value = t?.repeat || "";
+    $("fRemind").value = t ? remindOf(t) : 3;
+    $("fProgress").value = t ? +t.progress || 0 : 0;
+    $("fItems").value = t ? items(t).map((i) => (i.done ? "[x] " : "") + i.text).join("\n") : "";
     $("fNote").value = t?.note || "";
+    syncProgressField();
     $("form").classList.remove("hidden");
-    $("fTitle").focus();
+    $("form").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("fTitle").focus({ preventScroll: true });
+  }
+  function parseItems(text) {
+    return text.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+      const m = l.match(/^\[(x|X| )?\]\s*/);
+      return { text: m ? l.slice(m[0].length) : l, done: !!(m && /x/i.test(m[1] || "")) };
+    }).filter((i) => i.text);
+  }
+  function syncProgressField() {
+    const it = parseItems($("fItems").value);
+    const auto = it.length > 0;
+    $("fProgress").disabled = auto;
+    $("fProgVal").textContent = auto
+      ? Math.round((it.filter((i) => i.done).length / it.length) * 100) + " (tự tính)"
+      : $("fProgress").value;
   }
 
   $("btnAdd").onclick = () => openForm(null);
   $("fCancel").onclick = () => $("form").classList.add("hidden");
-  $("fProgress").oninput = (e) => ($("fProgVal").textContent = e.target.value);
+  $("fProgress").oninput = syncProgressField;
+  $("fItems").oninput = syncProgressField;
   $("fSave").onclick = async () => {
     const title = $("fTitle").value.trim();
     if (!title) return msg("Nhập tên công việc", "err");
     const data = {
       title,
       group: $("fGroup").value.trim(),
+      priority: $("fPriority").value,
       deadline: $("fDeadline").value,
+      time: $("fDeadline").value ? $("fTime").value : "",
+      repeat: $("fRepeat").value,
+      remindBefore: Math.max(0, parseInt($("fRemind").value, 10) || 0),
       progress: +$("fProgress").value,
+      items: parseItems($("fItems").value),
       note: $("fNote").value.trim(),
-      remindBefore: Math.max(0, +$("fRemind").value || 0),
     };
-    let label;
-    if (editingId) {
-      Object.assign(tasks.find((t) => t.id === editingId), data);
-      label = "Sửa: " + title;
-    } else {
-      tasks.push({ id: Date.now().toString(36), ...data });
-      label = "Thêm: " + title;
-    }
+    if (data.repeat && !data.deadline) return msg("Việc lặp lại cần có deadline", "err");
+    const id = editingId || uid();
+    const isNew = !editingId;
     $("form").classList.add("hidden");
-    render();
-    await save(label);
+    await mutate((list) => {
+      const t = byId(list, id);
+      if (t) Object.assign(t, data);
+      else list.push({ id, createdAt: new Date().toISOString(), ...data });
+    }, (isNew ? "Thêm: " : "Sửa: ") + title);
   };
 
+  // ---------- Thao tác trên thẻ ----------
   $("list").addEventListener("click", async (e) => {
-    const btn = e.target.closest("button[data-act]");
-    if (!btn) return;
-    const id = btn.closest(".task").dataset.id;
-    const t = tasks.find((x) => x.id === id);
-    if (btn.dataset.act === "edit") openForm(t);
-    if (btn.dataset.act === "del" && confirm(`Xóa “${t.title}”?`)) {
-      tasks = tasks.filter((x) => x.id !== id);
-      render();
-      await save("Xóa: " + t.title);
+    const el = e.target.closest("[data-act]");
+    if (!el || saving) return;
+    e.preventDefault();
+    const id = el.closest(".task").dataset.id;
+    const t = byId(tasks, id);
+    if (!t) return;
+    const act = el.dataset.act;
+    if (act === "edit") return openForm(t);
+    if (act === "del") {
+      if (!confirm(`Xóa “${t.title}”?`)) return;
+      return mutate((list) => { const i = list.findIndex((x) => x.id === id); if (i >= 0) list.splice(i, 1); }, "Xóa: " + t.title, "Đã xóa ✓");
     }
-  });
-  $("list").addEventListener("input", (e) => {
-    if (e.target.dataset.act === "prog") e.target.nextElementSibling.textContent = e.target.value + "%";
-  });
-  $("list").addEventListener("change", async (e) => {
-    if (e.target.dataset.act !== "prog") return;
-    const t = tasks.find((x) => x.id === e.target.closest(".task").dataset.id);
-    t.progress = +e.target.value;
-    render();
-    await save(`Tiến độ ${t.progress}%: ${t.title}`);
+    if (act === "item") {
+      const n = +el.dataset.n;
+      return mutate((list) => { const x = byId(list, id); if (x && x.items?.[n]) x.items[n].done = !x.items[n].done; }, "Việc con: " + t.title);
+    }
+    const step = { plus: 10, minus: -10 }[act];
+    if (step) return mutate((list) => { const x = byId(list, id); if (x) x.progress = Math.max(0, Math.min(100, (+x.progress || 0) + step)); }, `Tiến độ: ${t.title}`);
+    if (act === "done") return mutate((list) => { const x = byId(list, id); if (x) x.progress = 100; }, "Xong: " + t.title, t.repeat ? "Đã xong ✓ Đã tạo kỳ tiếp theo" : "Đã xong ✓");
+    if (act === "reopen") return mutate((list) => { const x = byId(list, id); if (x) x.progress = 0; }, "Mở lại: " + t.title);
   });
 
+  // ---------- Bộ lọc, tìm kiếm, chế độ xem ----------
   $("groups").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-g]");
     if (!b) return;
     group = b.dataset.g;
-    try { localStorage.setItem("nv_group", group); } catch {}
+    pref.set("group", group);
     render();
   });
-
   $("filter").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-f]");
     if (!b) return;
@@ -382,8 +654,77 @@
     document.querySelectorAll("#filter button").forEach((x) => x.classList.toggle("on", x === b));
     render();
   });
+  $("search").addEventListener("input", (e) => { query = e.target.value.trim(); render(); });
+  $("sort").value = sortBy;
+  $("sort").addEventListener("change", (e) => { sortBy = e.target.value; pref.set("sort", sortBy); render(); });
+  function setView(v) {
+    view = v;
+    pref.set("view", v);
+    document.querySelectorAll("#view button").forEach((x) => x.classList.toggle("on", x.dataset.v === v));
+    render();
+  }
+  $("view").addEventListener("click", (e) => { const b = e.target.closest("button[data-v]"); if (b) setView(b.dataset.v); });
+  $("calendar").addEventListener("click", (e) => {
+    const nav = e.target.closest("[data-cal]");
+    if (nav) {
+      const k = +nav.dataset.cal;
+      const n = new Date();
+      calMonth = k === 0 ? new Date(n.getFullYear(), n.getMonth(), 1) : new Date(calMonth.getFullYear(), calMonth.getMonth() + k, 1);
+      if (k === 0) calSel = todayStr();
+      return render();
+    }
+    const day = e.target.closest("[data-day]");
+    if (day) { calSel = day.dataset.day; render(); }
+  });
 
-  load();
+  // ---------- Nút bấm từ email: ?act=plus|done&id=... ----------
+  async function handleLinkAction() {
+    const p = new URLSearchParams(location.search);
+    const act = p.get("act"), id = p.get("id");
+    if (!act || !id) return;
+    history.replaceState(null, "", location.pathname);
+    const t = byId(tasks, id);
+    if (!t) return msg("Không tìm thấy việc này, có thể nó đã bị xóa.", "err");
+    if (isDone(t)) return msg(`“${t.title}” đã xong từ trước.`);
+    if (act === "done") {
+      await mutate((list) => {
+        const x = byId(list, id);
+        if (!x) return;
+        if (items(x).length) x.items.forEach((i) => (i.done = true));
+        x.progress = 100;
+      }, "Xong (từ email): " + t.title, `Đã đánh dấu xong “${t.title}” ✓${t.repeat ? " Đã tạo kỳ tiếp theo." : ""}`);
+    } else if (act === "plus") {
+      const ok = await mutate((list) => {
+        const x = byId(list, id);
+        if (!x) return;
+        const next = items(x).find((i) => !i.done);
+        if (next) next.done = true;
+        else x.progress = Math.min(100, (+x.progress || 0) + 25);
+      }, "Tiến độ (từ email): " + t.title, "");
+      const now = byId(tasks, id);
+      if (ok && now) msg(`“${now.title}”: tiến độ ${progressOf(now)}% ✓`);
+    }
+  }
+
+  // ---------- Khởi động ----------
+  setView(view);
+  (async () => {
+    if (!configured) {
+      msg("Website chưa được cấu hình: thiếu secret DATA_TOKEN hoặc chưa chạy workflow dựng website.", "err");
+      return render();
+    }
+    try {
+      await fetchRemote();
+    } catch (e) {
+      msg("Không tải được danh sách việc: " + e.message, "err");
+    }
+    render();
+    await handleLinkAction();
+  })();
+
+  if ("serviceWorker" in navigator && location.protocol === "https:") {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
 })();
 </script>
 </body>
