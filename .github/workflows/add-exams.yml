@@ -1,0 +1,44 @@
+name: Thêm lịch thi
+
+# Thêm nhiều môn thi vào dữ liệu cùng lúc (thường dùng tab Lịch thi → 📋 Dán lịch trên website là đủ).
+on:
+  workflow_dispatch:
+    inputs:
+      exams:
+        description: 'Danh sách môn thi dạng JSON, ví dụ [{"subject":"Thuế","date":"2026-12-05","time":"15:00","room":"B-205"}]'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-write
+
+jobs:
+  add:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Lấy repo dữ liệu
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.repository }}-data
+          token: ${{ secrets.DATA_TOKEN }}
+          path: data
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Thêm môn thi
+        env:
+          EXAMS_JSON: ${{ inputs.exams }}
+        run: python scripts/add_exams.py data/tasks.json
+      - name: Lưu vào repo dữ liệu
+        working-directory: data
+        run: |
+          if git diff --quiet; then echo "Không có thay đổi."; exit 0; fi
+          git config user.name "nhac-viec-bot"
+          git config user.email "nhac-viec-bot@users.noreply.github.com"
+          git add tasks.json
+          git commit -m "Thêm lịch thi"
+          git push

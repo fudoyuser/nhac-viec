@@ -243,7 +243,7 @@
 
     <div id="examImport" class="card hidden">
       <div class="row"><b>Dán lịch thi</b><button class="sm" id="iClose">Đóng</button></div>
-      <p class="meta" style="margin:6px 0 0">Copy bảng lịch thi từ Excel, trang trường hay tin nhắn rồi dán vào đây. Mỗi môn một dòng, các cột cách nhau bằng Tab, dấu | hoặc dấu ; theo thứ tự: <b>Môn · Ngày · Giờ · Phòng · SBD</b> (chỉ cần Môn và Ngày).</p>
+      <p class="meta" style="margin:6px 0 0">Copy bảng lịch thi từ Excel, trang trường hay tin nhắn rồi dán vào đây. Mỗi môn một dòng, các cột cách nhau bằng Tab, dấu | hoặc dấu ; theo thứ tự: <b>Môn · Ngày · Giờ · Phòng · SBD</b> (chỉ cần Môn và Ngày). Dán nguyên lịch thi của trường (mã học phần, phòng D-501;D-502, “Thi viết…”) cũng được.</p>
       <textarea id="iText" rows="6" style="margin-top:8px" placeholder="Kinh tế vi mô | 15/12/2026 | 7h30 | B201 | 1234&#10;Toán cao cấp | 18/12 | 13:30 | A305&#10;Triết học | 20/12/2026"></textarea>
       <div class="grid2">
         <div>
@@ -1396,7 +1396,7 @@
   function examEnd(e) {
     if (!e.date) return null;
     const d = parseYmd(e.date);
-    if (e.time) d.setMinutes(hm(e.time) + (num(e.duration) || 0));
+    if (e.time) d.setMinutes(hm(e.time) + (num(e.duration) || 90));
     else d.setHours(23, 59, 59);
     return d;
   }
@@ -1693,11 +1693,63 @@
   }
   const isWeekdayCell = (c) => /^(thứ\s*(\d|hai|ba|tư|năm|sáu|bảy)|chủ\s*nhật|cn|t[2-7])$/i.test(c.trim());
   const isHeader = (line) => /môn/i.test(line) && /(ngày|giờ|phòng)/i.test(line) && !parseDateCell(line);
+  // Tách mã lớp học phần (vd NHCO1111(126)_08) khỏi tên môn
+  const CODE_RE = /\b[A-Z]{2,6}\d{3,5}(?:\(\d+\))?(?:_\d+)?\b/;
+  function splitCode(text) {
+    const m = text.match(CODE_RE);
+    if (!m) return { subject: text.replace(/^[\s:;,\-–]+|[\s:;,\-–]+$/g, ""), code: "" };
+    const left = (text.slice(0, m.index) + " " + text.slice(m.index + m[0].length)).replace(/\s*[:;,\-–]\s*/g, " ").replace(/\s+/g, " ").trim();
+    return { subject: left || m[0], code: m[0] };
+  }
+  const ROOM_RE = /\b[A-Z]{1,3}\d{0,2}-\d{2,4}[A-Z]?\b/g; // B-205, A2-614, D-501
+  // Tìm ngày trong cả dòng (dạng d-m chỉ nhận khi có năm, để không nhầm với phòng "A2-614")
+  function findDate(line) {
+    const re = /(?:^|[^\w\-\/.])((\d{4})-(\d{1,2})-(\d{1,2})|(\d{1,2})[\/.](\d{1,2})(?:[\/.](\d{2,4}))?|(\d{1,2})-(\d{1,2})-(\d{4}))(?![\w\/.\-])/g;
+    let m;
+    while ((m = re.exec(line))) {
+      const d = parseDateCell(m[1].replace(/^(\d{1,2})-(\d{1,2})-(\d{4})$/, "$1/$2/$3"));
+      if (d) return { date: d, start: m.index + m[0].indexOf(m[1]), end: m.index + m[0].indexOf(m[1]) + m[1].length };
+    }
+    return null;
+  }
+  // Một dòng không có Tab/|: nhận dạng theo mẫu (ngày, giờ, phòng, hình thức) thay vì theo cột
+  function parseLine(line) {
+    const r = { subject: "", code: "", date: null, time: null, room: "", seat: "", form: "", raw: line };
+    const cut = [line.length];
+    const fd = findDate(line);
+    let rest = line;
+    if (fd) { r.date = fd.date; cut.push(fd.start); rest = line.slice(0, fd.start) + " ".repeat(fd.end - fd.start) + line.slice(fd.end); }
+    const tm = rest.match(/(?:^|[^\w])(\d{1,2})\s*(?:h|g|giờ|:)\s*(\d{2})?(?![\w\/])/i);
+    let timeEnd = -1;
+    if (tm && +tm[1] < 24 && (!tm[2] || +tm[2] < 60)) {
+      r.time = `${pad(+tm[1])}:${pad(tm[2] ? +tm[2] : 0)}`;
+      cut.push(tm.index);
+      timeEnd = tm.index + tm[0].length;
+    }
+    const rooms = [...rest.matchAll(ROOM_RE)];
+    if (rooms.length) { r.room = rooms.map((x) => x[0]).join(", "); cut.push(rooms[0].index); }
+    const seat = rest.match(/sbd\s*[:.]?\s*(\w+)/i);
+    if (seat) { r.seat = seat[1]; cut.push(seat.index); }
+    if (timeEnd > 0) {
+      let after = rest.slice(timeEnd).replace(/phòng\s*[:.]?\s*(?=[A-Z]{1,3}\d{0,2}-\d)/gi, " ");
+      rooms.forEach((x) => (after = after.replace(x[0], " ")));
+      after = after.replace(/[;,]/g, " ").replace(/\s+/g, " ").replace(/^[\s\-–:]+|[\s\-–:]+$/g, "").trim();
+      if (/[a-zà-ỹ]{2}/i.test(after)) r.form = after;
+    }
+    const sc = splitCode(line.slice(0, Math.min(...cut)).replace(/^\d{1,3}[.)]?\s+/, ""));
+    r.subject = sc.subject;
+    r.code = sc.code;
+    return r;
+  }
   function parseImport(text) {
     return text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).filter((l) => !isHeader(l)).map((line) => {
-      let cells = line.split(/\t|\||;/).map((c) => c.trim()).filter(Boolean);
-      if (cells.length === 1) cells = line.split(/\s+-\s+|,\s+/).map((c) => c.trim()).filter(Boolean);
-      const r = { subject: "", date: null, time: null, rest: [], raw: line };
+      if (!/\t|\|/.test(line)) {
+        const r = parseLine(line);
+        r.ok = !!(r.subject && r.date);
+        return r;
+      }
+      const cells = line.split(/\t|\|/).map((c) => c.trim()).filter(Boolean);
+      const r = { subject: "", code: "", form: "", date: null, time: null, rest: [], raw: line };
       for (const c of cells) {
         const d = parseDateCell(c);
         const t = parseTimeCell(c.replace(/\d{1,4}[\/.\-]\d{1,2}([\/.\-]\d{2,4})?/, " "));
@@ -1708,8 +1760,10 @@
         if (!r.subject) { r.subject = c.replace(/^\d+[.)]\s*/, ""); continue; }
         r.rest.push(c);
       }
-      r.room = (r.rest[0] || "").replace(/^phòng\s*/i, "");
+      r.room = (r.rest[0] || "").replace(/^phòng\s*/i, "").replace(/\s*;\s*/g, ", ");
       r.seat = (r.rest[1] || "").replace(/^sbd\s*/i, "");
+      r.form = r.rest.slice(2).join(" ");
+      Object.assign(r, splitCode(r.subject));
       r.ok = !!(r.subject && r.date);
       return r;
     });
@@ -1721,8 +1775,8 @@
     $("iAdd").disabled = !good || saving;
     $("iAdd").textContent = good ? `Thêm ${good} môn` : "Thêm";
     $("iPreview").innerHTML = importRows.length
-      ? `<table class="preview"><tr><th>Môn</th><th>Ngày</th><th>Giờ</th><th>Phòng</th><th>SBD</th></tr>${importRows.map((r) => `
-          <tr class="${r.ok ? "" : "bad"}"><td>${esc(r.subject || r.raw)}</td><td>${r.date ? fmt(r.date) : "⚠️ thiếu ngày"}</td><td>${r.time || ""}</td><td>${esc(r.room)}</td><td>${esc(r.seat)}</td></tr>`).join("")}</table>
+      ? `<table class="preview"><tr><th>Môn</th><th>Ngày</th><th>Giờ</th><th>Phòng</th><th>Hình thức</th></tr>${importRows.map((r) => `
+          <tr class="${r.ok ? "" : "bad"}"><td>${esc(r.subject || r.raw)}</td><td>${r.date ? fmt(r.date) : "⚠️ thiếu ngày"}</td><td>${r.time || ""}</td><td>${esc(r.room)}</td><td>${esc(r.form || "")}${r.seat ? ` · SBD ${esc(r.seat)}` : ""}</td></tr>`).join("")}</table>
          ${good < importRows.length ? `<small class="help">Dòng màu đỏ thiếu tên môn hoặc ngày thi nên sẽ bị bỏ qua.</small>` : ""}`
       : "";
   }
@@ -1744,8 +1798,8 @@
     if (termVal) pref.set("lastTerm", termVal);
     const ok = await mutate((ts, gs, ex) => {
       rows.forEach((r) => ex.push({
-        id: uid(), subject: r.subject, term: termVal, form: "", date: r.date, time: r.time || "", duration: dur,
-        room: r.room, seat: r.seat, score: "", note: "", plan: [], createdAt: now,
+        id: uid(), subject: r.subject, term: termVal, date: r.date, time: r.time || "", duration: dur,
+        room: r.room, seat: r.seat, form: r.form || "", score: "", note: r.code ? `Mã lớp HP: ${r.code}` : "", plan: [], createdAt: now,
       }));
     }, `Thêm ${rows.length} lịch thi`, `Đã thêm ${rows.length} môn thi ✓`);
     if (ok) { $("iText").value = ""; renderImportPreview(); $("examImport").classList.add("hidden"); }

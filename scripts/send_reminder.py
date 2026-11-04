@@ -578,7 +578,7 @@ def exam_end(e):
     if not d:
         return None
     if parse_time(e):
-        return exam_start(e) + timedelta(minutes=num(e.get("duration")))
+        return exam_start(e) + timedelta(minutes=num(e.get("duration")) or 90)  # không ghi thời lượng: coi như 90 phút
     return datetime.combine(d, datetime.max.time(), tzinfo=TZ)
 
 
