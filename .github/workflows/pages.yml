@@ -1,0 +1,38 @@
+name: Dựng website
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Chèn cấu hình vào trang
+        env:
+          DATA_TOKEN: ${{ secrets.DATA_TOKEN }}
+          DATA_REPO: ${{ github.repository }}-data
+        run: |
+          if [ -z "$DATA_TOKEN" ]; then echo "::error::Chưa có secret DATA_TOKEN"; exit 1; fi
+          TOKEN_B64=$(printf '%s' "$(echo "$DATA_TOKEN" | tr -d '[:space:]')" | base64 -w0)
+          mkdir -p _site
+          sed -e "s|__DATA_REPO__|$DATA_REPO|" -e "s|__DATA_TOKEN_B64__|$TOKEN_B64|" index.html > _site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

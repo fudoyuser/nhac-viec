@@ -21,10 +21,13 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Asia/Ho_Chi_Minh")
-TASKS_FILE = Path(__file__).resolve().parent.parent / "tasks.json"
+TASKS_FILE = Path(os.environ.get("TASKS_FILE") or Path(__file__).resolve().parent.parent / "tasks.json")
 
 
 def load_tasks():
+    if not TASKS_FILE.exists():
+        print(f"Chưa có file {TASKS_FILE} (chưa thêm việc nào trên website).")
+        return []
     with open(TASKS_FILE, encoding="utf-8") as f:
         return json.load(f)
 

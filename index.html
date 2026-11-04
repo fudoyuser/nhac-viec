@@ -61,28 +61,12 @@
   <header>
     <h1>📋 Nhắc việc</h1>
     <div style="display:flex;gap:6px">
-      <button id="btnSettings">⚙️ Cài đặt</button>
       <button class="primary" id="btnAdd">+ Thêm việc</button>
     </div>
   </header>
 
   <div id="msg" class="msg"></div>
 
-  <div id="settings" class="card hidden">
-    <b>Kết nối GitHub</b>
-    <p class="meta">Website lưu công việc vào file <code>tasks.json</code> trong repo. Bạn cần một token có quyền ghi vào repo này. Token chỉ lưu trong trình duyệt của bạn.</p>
-    <div class="grid2">
-      <div><label>Chủ repo (owner)</label><input id="sOwner"></div>
-      <div><label>Tên repo</label><input id="sRepo"></div>
-    </div>
-    <label>GitHub token</label>
-    <input id="sToken" type="password" placeholder="github_pat_...">
-    <small class="help">Tạo token tại GitHub → Settings → Developer settings → Fine-grained tokens. Chọn đúng repo này, quyền <b>Contents: Read and write</b>.</small>
-    <div class="bar">
-      <button id="sCancel">Đóng</button>
-      <button class="primary" id="sSave">Lưu</button>
-    </div>
-  </div>
 
   <div id="form" class="card hidden">
     <b id="formTitle">Thêm việc</b>
@@ -114,19 +98,12 @@
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
-  const store = {
-    get(k) { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
-    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
-  };
 
-  // Tự đoán owner/repo từ địa chỉ GitHub Pages: https://owner.github.io/repo/
-  const guessOwner = location.hostname.endsWith(".github.io") ? location.hostname.split(".")[0] : "";
-  const guessRepo = location.hostname.endsWith(".github.io") ? (location.pathname.split("/")[1] || "") : "";
-  const cfg = {
-    owner: store.get("nv_owner") || guessOwner,
-    repo: store.get("nv_repo") || guessRepo,
-    token: store.get("nv_token"),
-  };
+  // Hai giá trị dưới được GitHub Actions điền vào lúc dựng website (xem .github/workflows/pages.yml)
+  const DATA_REPO = "__DATA_REPO__";
+  const TOKEN_B64 = "__DATA_TOKEN_B64__";
+  const configured = !DATA_REPO.startsWith("__") && !TOKEN_B64.startsWith("__");
+  const cfg = { token: configured ? atob(TOKEN_B64) : "" };
 
   let tasks = [];
   let sha = null;
@@ -149,32 +126,36 @@
   };
   const b64decode = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\n/g, "")), (c) => c.charCodeAt(0)));
 
-  const apiUrl = () => `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/tasks.json`;
+  const apiUrl = () => `https://api.github.com/repos/${DATA_REPO}/contents/tasks.json`;
   const headers = () => ({ Accept: "application/vnd.github+json", ...(cfg.token ? { Authorization: "Bearer " + cfg.token } : {}) });
 
   async function load() {
+    if (!configured) {
+      msg("Website chưa được cấu hình: thiếu secret DATA_TOKEN hoặc chưa chạy workflow dựng website.", "err");
+      return render();
+    }
     try {
-      if (cfg.owner && cfg.repo) {
-        const r = await fetch(apiUrl() + "?t=" + Date.now(), { headers: headers(), cache: "no-store" });
-        if (!r.ok) throw new Error("GitHub API " + r.status);
+      const r = await fetch(apiUrl() + "?t=" + Date.now(), { headers: headers(), cache: "no-store" });
+      if (r.status === 404) {
+        tasks = [];
+        sha = null; // chưa có file, lần lưu đầu tiên sẽ tạo
+      } else if (!r.ok) {
+        throw new Error("GitHub API " + r.status);
+      } else {
         const j = await r.json();
         sha = j.sha;
         tasks = JSON.parse(b64decode(j.content));
-      } else {
-        const r = await fetch("tasks.json?t=" + Date.now(), { cache: "no-store" });
-        tasks = await r.json();
       }
     } catch (e) {
-      msg("Không tải được danh sách việc: " + e.message + ". Kiểm tra phần Cài đặt.", "err");
+      msg("Không tải được danh sách việc: " + e.message, "err");
       tasks = [];
     }
     render();
   }
 
   async function save(note) {
-    if (!cfg.token || !cfg.owner || !cfg.repo) {
-      msg("Chưa có token GitHub. Mở ⚙️ Cài đặt để nhập token, nếu không thay đổi sẽ không được lưu.", "err");
-      $("settings").classList.remove("hidden");
+    if (!configured) {
+      msg("Website chưa được cấu hình nên không lưu được.", "err");
       return false;
     }
     saving = true;
@@ -336,26 +317,6 @@
     render();
   });
 
-  $("btnSettings").onclick = () => {
-    $("sOwner").value = cfg.owner;
-    $("sRepo").value = cfg.repo;
-    $("sToken").value = cfg.token;
-    $("settings").classList.toggle("hidden");
-  };
-  $("sCancel").onclick = () => $("settings").classList.add("hidden");
-  $("sSave").onclick = () => {
-    cfg.owner = $("sOwner").value.trim();
-    cfg.repo = $("sRepo").value.trim();
-    cfg.token = $("sToken").value.trim();
-    store.set("nv_owner", cfg.owner);
-    store.set("nv_repo", cfg.repo);
-    store.set("nv_token", cfg.token);
-    $("settings").classList.add("hidden");
-    msg("Đã lưu cài đặt");
-    load();
-  };
-
-  if (!cfg.token) msg("Lần đầu dùng: mở ⚙️ Cài đặt và nhập GitHub token để có thể lưu công việc.", "err");
   load();
 })();
 </script>
