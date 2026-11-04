@@ -103,6 +103,37 @@
   .ghead b { font-size: 16px; }
   .ghead span { font-size: 13px; color: var(--muted); }
   small.help { color: var(--muted); font-size: 12px; }
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; margin-top: 14px; border-bottom: 1px solid var(--line); }
+  .tabs button { border: 0; border-bottom: 3px solid transparent; border-radius: 0; background: none; padding: 8px 14px; font-weight: 600; color: var(--muted); }
+  .tabs button.on { color: var(--primary); border-bottom-color: var(--primary); }
+  .tabs .badge { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--red); color: #fff; font-size: 11px; line-height: 18px; text-align: center; margin-left: 4px; }
+  /* Lịch thi */
+  .hero { background: linear-gradient(135deg, #2563eb, #7c3aed); color: #fff; border: 0; }
+  .hero .big { font-size: 22px; font-weight: 700; margin: 2px 0; }
+  .hero .sub2 { opacity: .9; font-size: 14px; }
+  .exam { border-left: 4px solid #7c3aed; }
+  .exam.today { border-left-color: var(--orange); }
+  .exam.soon { border-left-color: var(--red); }
+  .exam.past { border-left-color: var(--green); opacity: .8; }
+  .exam .when { font-size: 14px; margin-top: 4px; }
+  .exam .cd { font-weight: 700; font-size: 15px; margin-top: 2px; color: #7c3aed; }
+  .exam.today .cd { color: var(--orange); }
+  .exam.soon .cd { color: var(--red); }
+  .exam.past .cd { color: var(--green); }
+  .exam .info { font-size: 14px; color: var(--muted); margin-top: 2px; }
+  .exam .score { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; }
+  .exam .score input { width: 80px; padding: 4px 8px; }
+  .plan-row { display: grid; grid-template-columns: 22px 1fr 150px 34px; gap: 6px; align-items: center; margin-top: 6px; }
+  .plan-row input[type=checkbox] { width: 18px; height: 18px; margin: 0; }
+  .plan-row button { padding: 6px 0; }
+  @media (max-width: 520px) { .plan-row { grid-template-columns: 22px 1fr 34px; } .plan-row .p-date { grid-column: 2 / 3; grid-row: 2; } }
+  .gen { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 14px; margin-top: 10px; padding: 10px; border: 1px dashed var(--line); border-radius: 8px; }
+  .gen input { width: 64px; padding: 4px 8px; }
+  table.preview { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  table.preview th, table.preview td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: left; }
+  table.preview tr.bad td { color: var(--red); }
+  .preview-wrap { overflow-x: auto; }
   .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 12px; }
   @media (max-width: 520px) { .grid4 { grid-template-columns: 1fr 1fr; } }
   label.chk { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 14px; margin-top: 12px; cursor: pointer; }
@@ -146,13 +177,98 @@
 <div class="wrap">
   <header>
     <h1>📋 Nhắc việc</h1>
-    <div style="display:flex;gap:6px">
+    <div style="display:flex;gap:6px" id="taskActions">
       <button id="btnGroups">🗂 Nhóm</button>
       <button class="primary" id="btnAdd">+ Thêm việc</button>
     </div>
+    <div style="display:flex;gap:6px" id="examActions" class="hidden">
+      <button id="btnImport">📋 Dán lịch</button>
+      <button class="primary" id="btnAddExam">+ Thêm môn thi</button>
+    </div>
   </header>
 
+  <nav class="tabs" id="tabs">
+    <button data-tab="tasks" class="on">📋 Công việc</button>
+    <button data-tab="exams">📝 Lịch thi<span id="examBadge"></span></button>
+  </nav>
+
   <div id="msg" class="msg"></div>
+
+  <!-- ===================== TAB LỊCH THI ===================== -->
+  <div id="tabExams" class="hidden">
+    <div id="examForm" class="card hidden">
+      <b id="examFormTitle">Thêm môn thi</b>
+      <label>Môn thi</label>
+      <input id="eSubject" maxlength="150" placeholder="Kinh tế vi mô">
+      <div class="grid2">
+        <div>
+          <label>Kỳ thi</label>
+          <select id="eTermSel"></select>
+          <input id="eTermNew" class="hidden" maxlength="60" placeholder="Ví dụ: Cuối kỳ HK1 2026–2027" style="margin-top:6px">
+        </div>
+        <div>
+          <label>Hình thức</label>
+          <input id="eForm" list="examForms" maxlength="40" placeholder="Tự luận">
+          <datalist id="examForms"><option value="Tự luận"><option value="Trắc nghiệm"><option value="Tự luận + trắc nghiệm"><option value="Vấn đáp"><option value="Thực hành"><option value="Tiểu luận"><option value="Online"></datalist>
+        </div>
+      </div>
+      <div class="grid3">
+        <div><label>Ngày thi</label><input id="eDate" type="date"></div>
+        <div>
+          <label>Giờ thi (24h)</label>
+          <div style="display:flex;align-items:center;gap:4px"><select id="eHour" aria-label="Giờ thi"></select><b>:</b><select id="eMin" aria-label="Phút"></select></div>
+        </div>
+        <div><label>Thời lượng (phút)</label><input id="eDuration" type="number" min="0" step="5" placeholder="90" inputmode="numeric"></div>
+      </div>
+      <div class="grid3">
+        <div><label>Phòng thi</label><input id="eRoom" maxlength="40" placeholder="B201"></div>
+        <div><label>Số báo danh</label><input id="eSeat" maxlength="30"></div>
+        <div><label>Điểm (sau khi thi)</label><input id="eScore" maxlength="10" inputmode="decimal"></div>
+      </div>
+      <label>Ghi chú (đồ cần mang, tài liệu được dùng…)</label>
+      <textarea id="eNote" rows="2" placeholder="Mang thẻ SV, máy tính Casio, được dùng 1 tờ A4"></textarea>
+      <label>Kế hoạch ôn tập</label>
+      <div id="ePlan"></div>
+      <button class="sm" id="ePlanAdd" type="button" style="margin-top:8px">+ Thêm phần ôn</button>
+      <div class="gen">
+        <span>Tự chia</span><input id="eGenN" type="number" min="1" max="60" value="5" inputmode="numeric" aria-label="Số phần">
+        <span>phần, bắt đầu ôn trước</span><input id="eGenD" type="number" min="1" max="120" value="10" inputmode="numeric" aria-label="Số ngày">
+        <span>ngày thi</span><button class="sm" id="eGen" type="button">Tạo kế hoạch</button>
+      </div>
+      <div class="bar">
+        <button id="eCancel">Hủy</button>
+        <button class="primary" id="eSave">Lưu</button>
+      </div>
+    </div>
+
+    <div id="examImport" class="card hidden">
+      <div class="row"><b>Dán lịch thi</b><button class="sm" id="iClose">Đóng</button></div>
+      <p class="meta" style="margin:6px 0 0">Copy bảng lịch thi từ Excel, trang trường hay tin nhắn rồi dán vào đây. Mỗi môn một dòng, các cột cách nhau bằng Tab, dấu | hoặc dấu ; theo thứ tự: <b>Môn · Ngày · Giờ · Phòng · SBD</b> (chỉ cần Môn và Ngày).</p>
+      <textarea id="iText" rows="6" style="margin-top:8px" placeholder="Kinh tế vi mô | 15/12/2026 | 7h30 | B201 | 1234&#10;Toán cao cấp | 18/12 | 13:30 | A305&#10;Triết học | 20/12/2026"></textarea>
+      <div class="grid2">
+        <div>
+          <label>Kỳ thi cho tất cả các môn</label>
+          <input id="iTerm" list="termList" maxlength="60" placeholder="Cuối kỳ HK1 2026–2027">
+          <datalist id="termList"></datalist>
+        </div>
+        <div><label>Thời lượng mặc định (phút)</label><input id="iDuration" type="number" min="0" step="5" placeholder="90" inputmode="numeric"></div>
+      </div>
+      <div class="preview-wrap" id="iPreview"></div>
+      <div class="bar"><button class="primary" id="iAdd" disabled>Thêm</button></div>
+    </div>
+
+    <div id="examHero"></div>
+    <div class="chips groups" id="termChips"></div>
+    <div class="chips" id="examFilter">
+      <button data-ef="upcoming" class="on">Sắp thi</button>
+      <button data-ef="past">Đã thi</button>
+      <button data-ef="all">Tất cả</button>
+    </div>
+    <div id="examList"></div>
+  </div>
+
+  <!-- ===================== TAB CÔNG VIỆC ===================== -->
+  <div id="tabTasks">
 
   <div id="form" class="card hidden">
     <b id="formTitle">Thêm việc</b>
@@ -272,6 +388,7 @@
 
   <div id="calendar" class="hidden"></div>
   <div id="list"></div>
+  </div>
 </div>
 
 <script>
@@ -296,6 +413,7 @@
 
   let tasks = [];
   let groups = []; // danh sách nhóm đã tạo (kể cả nhóm chưa có việc nào)
+  let exams = []; // lịch thi (tab riêng)
   let sha = null;
   let editingId = null;
   let saving = false;
@@ -543,7 +661,7 @@
 
   async function fetchRemote() {
     const r = await fetch(apiUrl() + "?t=" + Date.now(), { headers: headers(), cache: "no-store" });
-    if (r.status === 404) { tasks = []; groups = []; sha = null; return; }
+    if (r.status === 404) { tasks = []; groups = []; exams = []; sha = null; return; }
     if (!r.ok) throw new Error("GitHub API " + r.status);
     const j = await r.json();
     sha = j.sha;
@@ -552,10 +670,11 @@
     tasks = Array.isArray(data) ? data : data.tasks || [];
     tasks.forEach((t) => { if (usesItems(t) && t.done === undefined && t.doneAt && allItemsDone(t)) t.done = true; });
     groups = Array.isArray(data) ? [] : data.groups || [];
+    exams = Array.isArray(data) ? [] : data.exams || [];
   }
 
   async function put(label) {
-    const body = { message: label, content: b64encode(JSON.stringify({ groups, tasks }, null, 2) + "\n"), ...(sha ? { sha } : {}) };
+    const body = { message: label, content: b64encode(JSON.stringify({ groups, tasks, exams }, null, 2) + "\n"), ...(sha ? { sha } : {}) };
     const r = await fetch(apiUrl(), { method: "PUT", headers: { ...headers(), "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (r.status === 409 || r.status === 422) return "conflict";
     if (!r.ok) throw new Error("GitHub API " + r.status + " " + ((await r.json().catch(() => ({}))).message || ""));
@@ -568,21 +687,21 @@
   async function mutate(fn, label, okText = "Đã lưu ✓") {
     if (!configured) { msg("Website chưa được cấu hình nên không lưu được.", "err"); return false; }
     if (saving) return false;
-    const backup = JSON.stringify({ groups, tasks });
+    const backup = JSON.stringify({ groups, tasks, exams });
     saving = true;
-    fn(tasks, groups); finalize(tasks); render();
+    fn(tasks, groups, exams); finalize(tasks); render();
     try {
       let res = await put(label);
       if (res === "conflict") {
         await fetchRemote();
-        fn(tasks, groups); finalize(tasks); render();
+        fn(tasks, groups, exams); finalize(tasks); render();
         res = await put(label);
         if (res === "conflict") throw new Error("dữ liệu đang được sửa ở nơi khác, thử lại sau ít giây");
       }
       if (okText) msg(okText);
       return true;
     } catch (e) {
-      try { await fetchRemote(); } catch { ({ groups, tasks } = JSON.parse(backup)); }
+      try { await fetchRemote(); } catch { ({ groups, tasks, exams } = JSON.parse(backup)); }
       msg("Chưa lưu được: " + e.message + ". Màn hình đã trở về dữ liệu đã lưu.", "err");
       return false;
     } finally {
@@ -732,6 +851,11 @@
   }
 
   function render() {
+    renderExams();
+    renderTasks();
+  }
+
+  function renderTasks() {
     const names = groupNames();
     renderGroups(names);
     const base = visibleTasks();
@@ -1241,8 +1365,399 @@
     }
   }
 
+  // =====================================================================
+  // ======================= LỊCH THI (tab riêng) =========================
+  // =====================================================================
+  let tab = pref.get("tab", "tasks");
+  let examFilter = "upcoming";
+  let term = pref.get("term", "*");
+  let editingExam = null;
+  const WEEKDAY = ["Chủ nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+
+  function setTab(t) {
+    tab = t;
+    pref.set("tab", t);
+    document.querySelectorAll("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
+    $("tabTasks").classList.toggle("hidden", t !== "tasks");
+    $("tabExams").classList.toggle("hidden", t !== "exams");
+    $("taskActions").classList.toggle("hidden", t !== "tasks");
+    $("examActions").classList.toggle("hidden", t !== "exams");
+    render();
+  }
+  $("tabs").addEventListener("click", (e) => { const b = e.target.closest("button[data-tab]"); if (b) setTab(b.dataset.tab); });
+
+  const hm = (time) => { const [h, m] = (time || "0:0").split(":").map(Number); return h * 60 + m; };
+  function examStart(e) {
+    if (!e.date) return null;
+    const d = parseYmd(e.date);
+    if (e.time) d.setMinutes(hm(e.time));
+    return d;
+  }
+  function examEnd(e) {
+    if (!e.date) return null;
+    const d = parseYmd(e.date);
+    if (e.time) d.setMinutes(hm(e.time) + (num(e.duration) || 0));
+    else d.setHours(23, 59, 59);
+    return d;
+  }
+  // past: đã thi xong · now: đang thi · today: hôm nay · soon: ≤3 ngày · upcoming · nodate
+  function examState(e) {
+    if (!e.date) return "nodate";
+    const now = new Date();
+    if (now > examEnd(e)) return "past";
+    if (e.time && now >= examStart(e)) return "now";
+    const d = daysTo(e.date);
+    if (d === 0) return "today";
+    if (d <= 3) return "soon";
+    return "upcoming";
+  }
+  function countdown(e) {
+    const st = examState(e);
+    if (st === "nodate") return "Chưa có ngày thi";
+    if (st === "past") return e.score ? `✅ Đã thi · Điểm: ${esc(e.score)}` : "✅ Đã thi";
+    if (st === "now") return "✍️ Đang thi";
+    const d = daysTo(e.date);
+    if (d === 0) {
+      if (!e.time) return "⏰ Thi hôm nay";
+      const mins = Math.max(0, Math.round((examStart(e) - new Date()) / 60000));
+      return `⏰ Hôm nay · còn ${mins >= 60 ? Math.floor(mins / 60) + " giờ " : ""}${mins % 60} phút`;
+    }
+    if (d === 1) return "⏳ Ngày mai thi";
+    return `⏳ Còn ${d} ngày`;
+  }
+  const whenText = (e) =>
+    e.date
+      ? `📅 ${WEEKDAY[parseYmd(e.date).getDay()]}, ${fmt(e.date)}${e.time ? ` · ${e.time}` : ""}${num(e.duration) ? ` (${num(e.duration)} phút)` : ""}`
+      : "📅 Chưa có ngày";
+  const plan = (e) => (Array.isArray(e.plan) ? e.plan : []);
+  const termOf = (e) => (e.term || "").trim();
+  const termNames = () => [...new Set(exams.map(termOf).filter(Boolean))].sort((a, b) => a.localeCompare(b, "vi"));
+  const examSortKey = (e) => (e.date || "9999-99-99") + (e.time || "99:99");
+
+  function examCard(e) {
+    const st = examState(e);
+    const cls = st === "past" ? "past" : st === "today" || st === "now" ? "today" : st === "soon" ? "soon" : "";
+    const dis = saving ? "disabled" : "";
+    const pl = plan(e);
+    const doneN = pl.filter((i) => i.done).length;
+    const pct = pl.length ? Math.round((doneN / pl.length) * 100) : 0;
+    const info = [e.room && `📍 Phòng ${esc(e.room)}`, e.seat && `🎫 SBD ${esc(e.seat)}`].filter(Boolean).join(" · ");
+    const tags = (termOf(e) ? `<span class="tag">${esc(termOf(e))}</span>` : "") + (e.form ? `<span class="tag low">${esc(e.form)}</span>` : "");
+    const late = (i) => !i.done && i.deadline && daysTo(i.deadline) < 0;
+    return `
+      <div class="card exam ${cls}" data-eid="${esc(e.id)}">
+        <div class="row">
+          <div>
+            <div class="title">${esc(e.subject)}</div>
+            ${tags ? `<div style="margin-top:2px">${tags}</div>` : ""}
+          </div>
+          <div class="actions">
+            <button class="sm" data-eact="edit" ${dis}>Sửa</button>
+            <button class="sm danger" data-eact="del" ${dis}>Xóa</button>
+          </div>
+        </div>
+        <div class="when">${whenText(e)}</div>
+        <div class="cd">${countdown(e)}</div>
+        ${info ? `<div class="info">${info}</div>` : ""}
+        ${e.note ? `<div class="note">${esc(e.note)}</div>` : ""}
+        ${pl.length ? `
+          <div class="meta" style="margin-top:8px">Ôn tập ${doneN}/${pl.length}${pl.some(late) ? ` · <span class="late">${pl.filter(late).length} phần trễ</span>` : ""}</div>
+          <ul class="checklist">${pl.map((i, n) => `
+            <li class="${i.done ? "ok" : ""}" data-eact="plan" data-n="${n}">
+              <input type="checkbox" ${i.done ? "checked" : ""} ${dis} tabindex="-1"><span>${esc(i.text)}${
+                i.deadline ? ` <span class="due ${i.done ? "" : late(i) ? "late" : daysTo(i.deadline) === 0 ? "today" : ""}">📅 ${fmt(i.deadline).slice(0, 5)}</span>` : ""}</span>
+            </li>`).join("")}</ul>
+          <div class="progress"><div class="pbar"><i style="width:${pct}%;background:${pct >= 100 ? "var(--green)" : "#7c3aed"}"></i></div><span class="pval">${pct}%</span></div>` : ""}
+        ${st === "past" ? `<div class="score">Điểm: <input class="escore" value="${esc(e.score || "")}" inputmode="decimal" maxlength="10" ${dis} aria-label="Điểm"></div>` : ""}
+      </div>`;
+  }
+
+  function renderExams() {
+    const upcoming = exams.filter((e) => examState(e) !== "past" && examState(e) !== "nodate").sort((a, b) => examSortKey(a).localeCompare(examSortKey(b)));
+    const within7 = upcoming.filter((e) => daysTo(e.date) <= 7).length;
+    $("examBadge").innerHTML = within7 ? `<span class="badge">${within7}</span>` : "";
+    if (tab !== "exams") return;
+
+    const next = upcoming[0];
+    $("examHero").innerHTML = next
+      ? `<div class="card hero">
+          <div class="sub2">Môn thi tiếp theo</div>
+          <div class="big">${esc(next.subject)}</div>
+          <div>${countdown(next)}</div>
+          <div class="sub2">${whenText(next)}${next.room ? ` · Phòng ${esc(next.room)}` : ""}</div>
+          ${upcoming.length > 1 ? `<div class="sub2" style="margin-top:4px">Còn ${upcoming.length} môn sắp thi</div>` : ""}
+        </div>`
+      : "";
+
+    const names = termNames();
+    if (term !== "*" && !names.includes(term)) term = "*";
+    $("termChips").innerHTML = names.length
+      ? [["*", "Tất cả kỳ thi"], ...names.map((n) => [n, n])]
+          .map(([k, l]) => `<button data-term="${esc(k)}" class="${term === k ? "on" : ""}">${esc(l)}</button>`).join("")
+      : "";
+    $("termList").innerHTML = names.map((n) => `<option value="${esc(n)}">`).join("");
+
+    let list = exams.filter((e) => term === "*" || termOf(e) === term);
+    if (examFilter === "upcoming") list = list.filter((e) => examState(e) !== "past").sort((a, b) => examSortKey(a).localeCompare(examSortKey(b)));
+    else if (examFilter === "past") list = list.filter((e) => examState(e) === "past").sort((a, b) => examSortKey(b).localeCompare(examSortKey(a)));
+    else list = list.sort((a, b) => examSortKey(a).localeCompare(examSortKey(b)));
+    $("examList").innerHTML = list.length
+      ? list.map(examCard).join("")
+      : `<div class="empty">${examFilter === "past" ? "Chưa có môn nào thi xong." : "Chưa có lịch thi. Bấm “+ Thêm môn thi” hoặc “📋 Dán lịch”."}</div>`;
+  }
+
+  $("termChips").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-term]");
+    if (!b) return;
+    term = b.dataset.term;
+    pref.set("term", term);
+    renderExams();
+  });
+  $("examFilter").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-ef]");
+    if (!b) return;
+    examFilter = b.dataset.ef;
+    document.querySelectorAll("#examFilter button").forEach((x) => x.classList.toggle("on", x === b));
+    renderExams();
+  });
+
+  // ----- Form môn thi -----
+  $("eHour").innerHTML = HOUR_OPTS;
+  function setExamTime(v) {
+    const [h, m] = v ? v.split(":") : ["", ""];
+    $("eMin").innerHTML = minuteOpts(m);
+    $("eHour").value = h || "";
+    $("eMin").value = m || "00";
+    $("eMin").disabled = !h;
+  }
+  $("eHour").onchange = () => ($("eMin").disabled = !$("eHour").value);
+  function fillTermSelect(value) {
+    const list = termNames();
+    if (value && !list.includes(value)) list.push(value);
+    $("eTermSel").innerHTML = `<option value="">— Không ghi —</option>` +
+      list.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("") +
+      `<option value="__new__">+ Kỳ thi mới…</option>`;
+    $("eTermSel").value = value || "";
+    $("eTermNew").value = "";
+    $("eTermNew").classList.add("hidden");
+  }
+  $("eTermSel").onchange = () => {
+    const isNew = $("eTermSel").value === "__new__";
+    $("eTermNew").classList.toggle("hidden", !isNew);
+    if (isNew) $("eTermNew").focus();
+  };
+  function addPlanRow(i = {}, after = null) {
+    const row = document.createElement("div");
+    row.className = "plan-row";
+    row.innerHTML = `
+      <input type="checkbox" class="p-done" ${i.done ? "checked" : ""} aria-label="Đã ôn xong">
+      <input class="p-text" maxlength="200" placeholder="Ôn chương 1" value="${esc(i.text || "")}">
+      <input class="p-date" type="date" value="${esc(i.deadline || "")}" aria-label="Ôn xong trước ngày">
+      <button type="button" class="p-del" aria-label="Xóa phần ôn">✕</button>`;
+    after ? after.after(row) : $("ePlan").append(row);
+    return row;
+  }
+  function readPlan() {
+    return [...$("ePlan").querySelectorAll(".plan-row")]
+      .map((r) => {
+        const x = { text: r.querySelector(".p-text").value.trim(), done: r.querySelector(".p-done").checked };
+        if (r.querySelector(".p-date").value) x.deadline = r.querySelector(".p-date").value;
+        return x;
+      })
+      .filter((x) => x.text);
+  }
+  $("ePlanAdd").onclick = () => addPlanRow().querySelector(".p-text").focus();
+  $("ePlan").addEventListener("click", (e) => { if (e.target.closest(".p-del")) e.target.closest(".plan-row").remove(); });
+  $("ePlan").addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || !e.target.classList.contains("p-text")) return;
+    e.preventDefault();
+    addPlanRow({}, e.target.closest(".plan-row")).querySelector(".p-text").focus();
+  });
+  // Tự chia kế hoạch ôn: N phần rải đều từ (ngày thi − D ngày) đến hôm trước ngày thi
+  $("eGen").onclick = () => {
+    const date = $("eDate").value;
+    if (!date) return msg("Chọn ngày thi trước", "err");
+    const n = Math.max(1, Math.min(60, parseInt($("eGenN").value, 10) || 1));
+    let span = Math.max(1, parseInt($("eGenD").value, 10) || 1);
+    const start = parseYmd(date);
+    start.setDate(start.getDate() - span);
+    const today = parseYmd(todayStr());
+    if (start < today) { span -= daysBetween(ymd(start), todayStr()); start.setTime(today.getTime()); }
+    if (span < 1) return msg("Ngày thi quá gần để chia kế hoạch", "err");
+    if (readPlan().length && !confirm("Thay kế hoạch ôn hiện tại bằng kế hoạch mới?")) return;
+    $("ePlan").innerHTML = "";
+    for (let i = 1; i <= n; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + Math.ceil((i * span) / n) - 1);
+      addPlanRow({ text: i === n && n > 1 ? `Ôn phần ${i} + tổng ôn` : `Ôn phần ${i}`, deadline: ymd(d) });
+    }
+    msg(`Đã chia ${n} phần ôn trong ${span} ngày. Bạn có thể đổi tên từng phần (ví dụ “Chương 1–2”).`);
+  };
+
+  function openExamForm(e) {
+    editingExam = e ? e.id : null;
+    $("examImport").classList.add("hidden");
+    $("examFormTitle").textContent = e ? "Sửa môn thi" : "Thêm môn thi";
+    $("eSubject").value = e?.subject || "";
+    fillTermSelect(e ? termOf(e) : term !== "*" ? term : pref.get("lastTerm", ""));
+    $("eForm").value = e?.form || "";
+    $("eDate").value = e?.date || "";
+    setExamTime(e?.time || "");
+    $("eDuration").value = e?.duration || "";
+    $("eRoom").value = e?.room || "";
+    $("eSeat").value = e?.seat || "";
+    $("eScore").value = e?.score || "";
+    $("eNote").value = e?.note || "";
+    $("ePlan").innerHTML = "";
+    plan(e || {}).forEach((i) => addPlanRow(i));
+    $("examForm").classList.remove("hidden");
+    $("examForm").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("eSubject").focus({ preventScroll: true });
+  }
+  $("btnAddExam").onclick = () => openExamForm(null);
+  $("eCancel").onclick = () => $("examForm").classList.add("hidden");
+  $("eSave").onclick = async () => {
+    const subject = $("eSubject").value.trim();
+    if (!subject) return msg("Nhập tên môn thi", "err");
+    const termVal = $("eTermSel").value === "__new__" ? $("eTermNew").value.trim() : $("eTermSel").value;
+    const date = $("eDate").value;
+    if (date) {
+      const diff = daysBetween(todayStr(), date);
+      if ((diff < -365 || diff > 3650) && !confirm(`Ngày thi ${fmt(date)} ${diff < 0 ? "đã qua hơn 1 năm" : "xa hơn 10 năm"}, có thể bị nhầm năm.\nBấm Hủy để sửa lại, OK để vẫn lưu.`)) return;
+    }
+    const data = {
+      subject, term: termVal, form: $("eForm").value.trim(), date,
+      time: date && $("eHour").value ? `${$("eHour").value}:${$("eMin").value}` : "",
+      duration: num($("eDuration").value) || "", room: $("eRoom").value.trim(), seat: $("eSeat").value.trim(),
+      score: $("eScore").value.trim(), note: $("eNote").value.trim(), plan: readPlan(),
+    };
+    const id = editingExam || uid();
+    const isNew = !editingExam;
+    if (termVal) pref.set("lastTerm", termVal);
+    $("examForm").classList.add("hidden");
+    await mutate((ts, gs, ex) => {
+      const x = ex.find((y) => y.id === id);
+      if (x) Object.assign(x, data);
+      else ex.push({ id, createdAt: new Date().toISOString(), ...data });
+    }, (isNew ? "Thêm lịch thi: " : "Sửa lịch thi: ") + subject);
+  };
+
+  // ----- Thao tác trên thẻ môn thi -----
+  $("examList").addEventListener("click", async (ev) => {
+    const el = ev.target.closest("[data-eact]");
+    if (!el || saving) return;
+    ev.preventDefault();
+    const id = el.closest(".exam").dataset.eid;
+    const e = exams.find((x) => x.id === id);
+    if (!e) return;
+    const act = el.dataset.eact;
+    if (act === "edit") return openExamForm(e);
+    if (act === "del") {
+      if (!confirm(`Xóa lịch thi “${e.subject}”?`)) return;
+      return mutate((ts, gs, ex) => { const i = ex.findIndex((x) => x.id === id); if (i >= 0) ex.splice(i, 1); }, "Xóa lịch thi: " + e.subject, "Đã xóa ✓");
+    }
+    if (act === "plan") {
+      const n = +el.dataset.n;
+      return mutate((ts, gs, ex) => { const x = ex.find((y) => y.id === id); if (x?.plan?.[n]) x.plan[n].done = !x.plan[n].done; }, "Ôn tập: " + e.subject);
+    }
+  });
+  $("examList").addEventListener("change", async (ev) => {
+    const inp = ev.target.closest("input.escore");
+    if (!inp || saving) return;
+    const id = inp.closest(".exam").dataset.eid;
+    const v = inp.value.trim();
+    await mutate((ts, gs, ex) => { const x = ex.find((y) => y.id === id); if (x) x.score = v; }, "Điểm thi", "Đã lưu điểm ✓");
+  });
+  $("examList").addEventListener("keydown", (ev) => { if (ev.key === "Enter" && ev.target.matches("input.escore")) ev.target.blur(); });
+
+  // ----- Dán lịch thi hàng loạt -----
+  function parseDateCell(c) {
+    let m = c.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`;
+    m = c.match(/(?:^|[^\d])(\d{1,2})[\/.\-](\d{1,2})(?:[\/.\-](\d{2,4}))?(?![\d:hg])/i);
+    if (!m) return null;
+    const d = +m[1], mo = +m[2];
+    if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+    let y = m[3] ? +m[3] : new Date().getFullYear();
+    if (y < 100) y += 2000;
+    let s = `${y}-${pad(mo)}-${pad(d)}`;
+    if (!m[3] && daysBetween(todayStr(), s) < -30) s = `${y + 1}-${pad(mo)}-${pad(d)}`; // không ghi năm: lấy lần tới gần nhất
+    return s;
+  }
+  function parseTimeCell(c) {
+    const m = c.match(/(?:^|[^\d\/.\-])(\d{1,2})\s*(?:h|g|giờ|:)\s*(\d{1,2})?(?!\s*[\/.\-]\d)/i);
+    if (!m) return null;
+    const h = +m[1], mi = m[2] ? +m[2] : 0;
+    if (h > 23 || mi > 59) return null;
+    return `${pad(h)}:${pad(mi)}`;
+  }
+  const isWeekdayCell = (c) => /^(thứ\s*(\d|hai|ba|tư|năm|sáu|bảy)|chủ\s*nhật|cn|t[2-7])$/i.test(c.trim());
+  const isHeader = (line) => /môn/i.test(line) && /(ngày|giờ|phòng)/i.test(line) && !parseDateCell(line);
+  function parseImport(text) {
+    return text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).filter((l) => !isHeader(l)).map((line) => {
+      let cells = line.split(/\t|\||;/).map((c) => c.trim()).filter(Boolean);
+      if (cells.length === 1) cells = line.split(/\s+-\s+|,\s+/).map((c) => c.trim()).filter(Boolean);
+      const r = { subject: "", date: null, time: null, rest: [], raw: line };
+      for (const c of cells) {
+        const d = parseDateCell(c);
+        const t = parseTimeCell(c.replace(/\d{1,4}[\/.\-]\d{1,2}([\/.\-]\d{2,4})?/, " "));
+        if (d && !r.date) { r.date = d; if (t && !r.time) r.time = t; continue; }
+        if (t && !r.time && c.replace(/[\dhg:giờ\s]/gi, "").length <= 2) { r.time = t; continue; }
+        if (isWeekdayCell(c) || /^(ca|kíp)\s*\d+$/i.test(c)) continue;
+        if (!r.subject && /^\d{1,3}[.)]?$/.test(c)) continue; // cột STT
+        if (!r.subject) { r.subject = c.replace(/^\d+[.)]\s*/, ""); continue; }
+        r.rest.push(c);
+      }
+      r.room = (r.rest[0] || "").replace(/^phòng\s*/i, "");
+      r.seat = (r.rest[1] || "").replace(/^sbd\s*/i, "");
+      r.ok = !!(r.subject && r.date);
+      return r;
+    });
+  }
+  let importRows = [];
+  function renderImportPreview() {
+    importRows = parseImport($("iText").value);
+    const good = importRows.filter((r) => r.ok).length;
+    $("iAdd").disabled = !good || saving;
+    $("iAdd").textContent = good ? `Thêm ${good} môn` : "Thêm";
+    $("iPreview").innerHTML = importRows.length
+      ? `<table class="preview"><tr><th>Môn</th><th>Ngày</th><th>Giờ</th><th>Phòng</th><th>SBD</th></tr>${importRows.map((r) => `
+          <tr class="${r.ok ? "" : "bad"}"><td>${esc(r.subject || r.raw)}</td><td>${r.date ? fmt(r.date) : "⚠️ thiếu ngày"}</td><td>${r.time || ""}</td><td>${esc(r.room)}</td><td>${esc(r.seat)}</td></tr>`).join("")}</table>
+         ${good < importRows.length ? `<small class="help">Dòng màu đỏ thiếu tên môn hoặc ngày thi nên sẽ bị bỏ qua.</small>` : ""}`
+      : "";
+  }
+  $("btnImport").onclick = () => {
+    $("examForm").classList.add("hidden");
+    $("examImport").classList.toggle("hidden");
+    if (!$("iTerm").value && term !== "*") $("iTerm").value = term;
+    renderImportPreview();
+    if (!$("examImport").classList.contains("hidden")) $("iText").focus();
+  };
+  $("iClose").onclick = () => $("examImport").classList.add("hidden");
+  $("iText").addEventListener("input", renderImportPreview);
+  $("iAdd").onclick = async () => {
+    const rows = importRows.filter((r) => r.ok);
+    if (!rows.length) return;
+    const termVal = $("iTerm").value.trim();
+    const dur = num($("iDuration").value) || "";
+    const now = new Date().toISOString();
+    if (termVal) pref.set("lastTerm", termVal);
+    const ok = await mutate((ts, gs, ex) => {
+      rows.forEach((r) => ex.push({
+        id: uid(), subject: r.subject, term: termVal, form: "", date: r.date, time: r.time || "", duration: dur,
+        room: r.room, seat: r.seat, score: "", note: "", plan: [], createdAt: now,
+      }));
+    }, `Thêm ${rows.length} lịch thi`, `Đã thêm ${rows.length} môn thi ✓`);
+    if (ok) { $("iText").value = ""; renderImportPreview(); $("examImport").classList.add("hidden"); }
+  };
+
+  // Cập nhật đồng hồ đếm ngược mỗi phút
+  setInterval(() => { if (!saving && tab === "exams" && $("examForm").classList.contains("hidden")) renderExams(); }, 60000);
+
   // ---------- Khởi động ----------
   setView(view);
+  { const q = new URLSearchParams(location.search).get("tab"); if (q === "exams" || q === "tasks") tab = q; }
+  setTab(tab);
   (async () => {
     if (!configured) {
       msg("Website chưa được cấu hình: thiếu secret DATA_TOKEN hoặc chưa chạy workflow dựng website.", "err");

@@ -38,14 +38,20 @@ REPEAT_TEXT = {"daily": "Hằng ngày", "weekly": "Hằng tuần", "monthly": "H
 
 # ---------------------------------------------------------------- dữ liệu
 
-def load_tasks():
+def load_data():
+    """Trả về (tasks, exams). Dữ liệu cũ là một mảng việc; dữ liệu mới là {"groups", "tasks", "exams"}."""
     if not TASKS_FILE.exists():
         print(f"Chưa có file {TASKS_FILE} (chưa thêm việc nào trên website).")
-        return []
+        return [], []
     with open(TASKS_FILE, encoding="utf-8") as f:
         data = json.load(f)
-    # Dữ liệu cũ là một mảng việc; dữ liệu mới là {"groups": [...], "tasks": [...]}
-    return data if isinstance(data, list) else data.get("tasks", [])
+    if isinstance(data, list):
+        return data, []
+    return data.get("tasks", []), data.get("exams", [])
+
+
+def load_tasks():
+    return load_data()[0]
 
 
 def items(t):
@@ -469,7 +475,7 @@ def build_full(tasks, now, site_url):
         subject += f", {len(groups['overdue'])} quá hạn"
     elif urgent:
         subject += f", {urgent} việc gấp"
-    return subject, wrap(f"Nhắc việc ngày {now:%d/%m/%Y}", body, site_url)
+    return subject, f"Nhắc việc ngày {now:%d/%m/%Y}", body
 
 
 def build_urgent(tasks, now, site_url):
@@ -484,7 +490,7 @@ def build_urgent(tasks, now, site_url):
         parts.append(f"{n_today} việc hạn hôm nay")
     subject = f"[Nhắc việc] ⚠️ {now:%H}h: " + ", ".join(parts)
     body = render_sections(groups, {"overdue", "today"}, now, site_url)
-    return subject, wrap(f"Cần xử lý ngay ({now:%H:%M})", body, site_url)
+    return subject, f"Cần xử lý ngay ({now:%H:%M})", body
 
 
 def build_weekly(tasks, now, site_url):
@@ -544,7 +550,138 @@ def build_weekly(tasks, now, site_url):
         body += '<h3 style="color:#ea580c;margin:20px 0 8px">📅 Tuần tới</h3>'
         body += "".join(task_html(t, now, site_url) for t in next_week)
     subject = f"[Nhắc việc] Báo cáo tuần {(now - timedelta(days=6)):%d/%m}–{now:%d/%m}: xong {len(done_week)}, quá hạn {len(overdue)}"
-    return subject, wrap("Báo cáo tuần", body, site_url)
+    return subject, "Báo cáo tuần", body
+
+
+# ---------------------------------------------------------------- lịch thi
+
+WEEKDAY_VI = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ nhật"]
+
+
+def exam_date(e):
+    try:
+        return date.fromisoformat(e.get("date") or "")
+    except ValueError:
+        return None
+
+
+def exam_start(e):
+    d = exam_date(e)
+    if not d:
+        return None
+    tm = parse_time(e) or datetime.min.time()
+    return datetime.combine(d, tm, tzinfo=TZ)
+
+
+def exam_end(e):
+    d = exam_date(e)
+    if not d:
+        return None
+    if parse_time(e):
+        return exam_start(e) + timedelta(minutes=num(e.get("duration")))
+    return datetime.combine(d, datetime.max.time(), tzinfo=TZ)
+
+
+def exam_state(e, now):
+    """past (đã thi) · now (đang thi) · today · soon (≤3 ngày) · upcoming · nodate"""
+    d = exam_date(e)
+    if not d:
+        return "nodate"
+    if now > exam_end(e):
+        return "past"
+    if parse_time(e) and now >= exam_start(e):
+        return "now"
+    left = (d - now.date()).days
+    if left == 0:
+        return "today"
+    return "soon" if left <= 3 else "upcoming"
+
+
+def exam_countdown(e, now):
+    st = exam_state(e, now)
+    if st == "now":
+        return "✍️ Đang thi"
+    left = (exam_date(e) - now.date()).days
+    if left == 0:
+        if not parse_time(e):
+            return "⏰ Thi hôm nay"
+        mins = max(0, int((exam_start(e) - now).total_seconds() // 60))
+        return f"⏰ Hôm nay · còn {str(mins // 60) + ' giờ ' if mins >= 60 else ''}{mins % 60} phút"
+    if left == 1:
+        return "⏳ Ngày mai thi"
+    return f"⏳ Còn {left} ngày"
+
+
+def exam_html(e, now):
+    d = exam_date(e)
+    st = exam_state(e, now)
+    color = {"today": "#ea580c", "now": "#ea580c", "soon": "#dc2626"}.get(st, "#7c3aed")
+    when = f"📅 {WEEKDAY_VI[d.weekday()]}, {d:%d/%m/%Y}"
+    if parse_time(e):
+        when += f" · {e['time']}"
+    if num(e.get("duration")):
+        when += f" ({fmt_num(num(e['duration']))} phút)"
+    tags = (tag(e["term"], "#ede9fe", "#5b21b6") if e.get("term") else "") + (tag(e["form"], "#f3f4f6", "#374151") if e.get("form") else "")
+    info = " · ".join(x for x in [
+        f"📍 Phòng {html.escape(e['room'])}" if e.get("room") else "",
+        f"🎫 SBD {html.escape(e['seat'])}" if e.get("seat") else "",
+    ] if x)
+    pl = [i for i in (e.get("plan") or []) if isinstance(i, dict)]
+    plan_html = ""
+    if pl:
+        done_n = sum(1 for i in pl if i.get("done"))
+        late = [i for i in pl if not i.get("done") and (dl := days_left(i, now.date())) is not None and dl < 0]
+        plan_html = f'<div style="font-size:13px;color:#555;margin-top:6px">Ôn tập {done_n}/{len(pl)}'
+        if late:
+            plan_html += f' · <b style="color:#dc2626">{len(late)} phần trễ</b>'
+        plan_html += "</div>"
+        for i in [i for i in pl if not i.get("done")][:3]:
+            dl = days_left(i, now.date())
+            c = "#dc2626" if dl is not None and dl < 0 else "#ea580c" if dl == 0 else "#6b7280"
+            due = f' <span style="color:{c};font-size:12px">📅 {fmt_date(i["deadline"])[:5]}</span>' if dl is not None else ""
+            plan_html += f'<div style="font-size:13px">☐ {html.escape(i.get("text", ""))}{due}</div>'
+        plan_html += bar(round(done_n / len(pl) * 100))
+    note = (e.get("note") or "").strip()
+    return (
+        f'<div style="border:1px solid #e5e7eb;border-left:4px solid {color};border-radius:8px;padding:10px 12px;margin-bottom:8px">'
+        + (f"<div>{tags}</div>" if tags else "")
+        + f'<b style="font-size:16px">{html.escape(e.get("subject", ""))}</b>'
+        + f'<div style="font-size:14px;margin-top:2px">{when}</div>'
+        + f'<div style="font-size:15px;font-weight:bold;color:{color};margin-top:2px">{exam_countdown(e, now)}</div>'
+        + (f'<div style="font-size:14px;color:#555">{info}</div>' if info else "")
+        + (f'<div style="font-size:13px;color:#444;margin-top:4px">🎒 {html.escape(note)}</div>' if note else "")
+        + plan_html
+        + "</div>"
+    )
+
+
+def exam_section(mode, exams, now):
+    """Phần lịch thi trong mail: (tiền tố tiêu đề, html) hoặc None."""
+    live = [e for e in exams if exam_state(e, now) not in ("past", "nodate")]
+    live.sort(key=lambda e: exam_start(e))
+    today = [e for e in live if exam_date(e) == now.date() and exam_state(e, now) == "today"]  # chưa bắt đầu thi
+    tomorrow = [e for e in live if (exam_date(e) - now.date()).days == 1]
+    if mode == "full":
+        show, title = [e for e in live if (exam_date(e) - now.date()).days <= 14], "📝 Lịch thi 14 ngày tới"
+    elif mode == "weekly":
+        show, title = [e for e in live if (exam_date(e) - now.date()).days <= 7], "📝 Lịch thi tuần tới"
+    else:  # urgent: thi hôm nay, và từ 18h thì nhắc cả môn thi ngày mai
+        show, title = today + (tomorrow if now.hour >= 18 else []), "📝 Sắp thi"
+    if not show:
+        return None
+
+    def names(lst):
+        return ", ".join(e.get("subject", "") + (f" {e['time']}" if parse_time(e) else "") for e in lst)
+
+    if today:
+        prefix = f"📝 Hôm nay thi {names(today)}"
+    elif tomorrow and (mode != "urgent" or now.hour >= 18):
+        prefix = f"📝 Mai thi {names(tomorrow)}"
+    else:
+        first = show[0]
+        prefix = f"📝 Còn {(exam_date(first) - now.date()).days} ngày thi {first.get('subject', '')}"
+    body = f'<h3 style="color:#7c3aed;margin:20px 0 8px">{title} ({len(show)})</h3>' + "".join(exam_html(e, now) for e in show)
+    return prefix, body
 
 
 def pick_mode(now):
@@ -624,15 +761,26 @@ def main():
     if os.environ.get("NOW"):  # chỉ dùng khi chạy thử
         now = datetime.fromisoformat(os.environ["NOW"]).replace(tzinfo=TZ)
     site_url = (os.environ.get("SITE_URL") or "").strip()
-    tasks = load_tasks()
+    tasks, exams = load_data()
     mode = pick_mode(now)
     print(f"Chế độ: {mode} ({now:%A %d/%m %H:%M})")
 
     built = {"full": build_full, "urgent": build_urgent, "weekly": build_weekly}[mode](tasks, now, site_url)
-    if not built:
+    ex = exam_section(mode, exams, now)
+    if not built and not ex:
         print("Không có gì cần nhắc ở chế độ này, không gửi mail.")
         return
-    subject, body = built
+    if built:
+        subject, title, body = built
+        if ex:
+            subject = subject.replace("[Nhắc việc] ", f"[Nhắc việc] {ex[0]} · ", 1)
+            body = ex[1] + body
+    else:
+        subject, title, body = f"[Nhắc việc] {ex[0]}", "Lịch thi", ex[1]
+    exam_link = f"{site_url}?tab=exams" if ex and site_url else ""
+    body = wrap(title, body, site_url)
+    if exam_link:
+        body = body.replace("Mở danh sách việc</a></p>", f"Mở danh sách việc</a>{button(exam_link, '📝 Mở lịch thi')}</p>", 1)
     if dry_run:
         print(subject)
         print(body)

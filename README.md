@@ -16,6 +16,13 @@ Website quản lý công việc cá nhân, tự gửi email nhắc tiến độ.
 - Cài như ứng dụng trên điện thoại: Chrome → menu → *Thêm vào màn hình chính*; Safari → Chia sẻ → *Thêm vào MH chính*
 - Lưu lỗi thì màn hình tự trở về dữ liệu đã lưu; nếu 2 máy cùng sửa, website tự tải bản mới rồi lưu lại
 
+**Tab 📝 Lịch thi** (tách riêng khỏi công việc)
+- Mỗi môn: kỳ thi, ngày + giờ thi, thời lượng, phòng, SBD, hình thức, ghi chú đồ cần mang
+- Đếm ngược tới môn thi tiếp theo; qua giờ thi tự chuyển sang **Đã thi** (không báo quá hạn) và có ô nhập điểm
+- **Kế hoạch ôn tập**: tự chia N phần rải đều trước ngày thi, phần nào trễ báo đỏ
+- **📋 Dán lịch**: dán bảng lịch thi (Môn · Ngày · Giờ · Phòng · SBD) từ Excel / trang trường, xem trước rồi thêm tất cả
+- Email: mail 7h có mục lịch thi 14 ngày tới; mail các giờ khác nhắc môn thi hôm nay (chưa thi), từ 18h nhắc môn thi ngày mai; báo cáo tuần có lịch thi tuần tới
+
 **Email** (GitHub Actions, 7h, 9h, 12h, 15h, 18h, 20h, 22h giờ VN)
 - **7h sáng**: bản đầy đủ mọi việc chưa xong, chia theo mức gấp
 - **Các giờ khác**: chỉ gửi khi có việc quá hạn hoặc hạn hôm nay
