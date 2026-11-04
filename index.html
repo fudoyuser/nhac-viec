@@ -147,7 +147,12 @@
     </div>
     <div class="grid3">
       <div><label>Deadline</label><input id="fDeadline" type="date"></div>
-      <div><label>Giờ (tùy chọn)</label><input id="fTime" type="time"></div>
+      <div>
+        <label>Giờ (tùy chọn, 24h)</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <select id="fHour" aria-label="Giờ"></select><b>:</b><select id="fMin" aria-label="Phút"></select>
+        </div>
+      </div>
       <div>
         <label>Lặp lại</label>
         <select id="fRepeat">
@@ -601,7 +606,7 @@
     fillGroupSelect(t ? t.group || "" : defaultGroup());
     $("fPriority").value = t ? prioOf(t) : "normal";
     $("fDeadline").value = t?.deadline || (view === "cal" && calSel ? calSel : "");
-    $("fTime").value = t?.time || "";
+    setTime(t?.time || "");
     $("fRepeat").value = t?.repeat || "";
     $("fRemind").value = t ? remindOf(t) : 3;
     $("fProgress").value = t ? +t.progress || 0 : 0;
@@ -612,6 +617,20 @@
     $("form").scrollIntoView({ behavior: "smooth", block: "start" });
     $("fTitle").focus({ preventScroll: true });
   }
+  // Ô chọn giờ 24h (ô type="time" hiển thị SA/CH theo ngôn ngữ máy nên không dùng)
+  const MINUTES = Array.from({ length: 12 }, (_, i) => pad(i * 5));
+  $("fHour").innerHTML = `<option value="">--</option>` + Array.from({ length: 24 }, (_, h) => `<option>${pad(h)}</option>`).join("");
+  function setTime(v) {
+    const [h, m] = v ? v.split(":") : ["", ""];
+    const mins = m && !MINUTES.includes(m) ? [...MINUTES, m].sort() : MINUTES;
+    $("fMin").innerHTML = mins.map((x) => `<option>${x}</option>`).join("");
+    $("fHour").value = h || "";
+    $("fMin").value = m || "00";
+    $("fMin").disabled = !h;
+  }
+  const getTime = () => ($("fHour").value ? `${$("fHour").value}:${$("fMin").value}` : "");
+  $("fHour").onchange = () => ($("fMin").disabled = !$("fHour").value);
+
   // Nhóm mặc định khi thêm việc: nhóm đang lọc, nếu không thì nhóm dùng lần trước
   function defaultGroup() {
     if (group !== "*" && group !== NO_GROUP) return group;
@@ -664,7 +683,7 @@
       group: groupVal,
       priority: $("fPriority").value,
       deadline: $("fDeadline").value,
-      time: $("fDeadline").value ? $("fTime").value : "",
+      time: $("fDeadline").value ? getTime() : "",
       repeat: $("fRepeat").value,
       remindBefore: Math.max(0, parseInt($("fRemind").value, 10) || 0),
       progress: +$("fProgress").value,
