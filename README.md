@@ -3,7 +3,7 @@
 Website quản lý công việc cá nhân, tự gửi email nhắc tiến độ mỗi ngày.
 
 - **Website** (GitHub Pages): thêm, sửa, xóa việc, kéo thanh tiến độ. Dữ liệu lưu trong `tasks.json`.
-- **Email** (GitHub Actions): 7:05 sáng và 20:05 tối (giờ VN), gửi danh sách việc quá hạn, đến hạn hôm nay, sắp đến hạn và đang theo dõi.
+- **Email** (GitHub Actions): 7h, 9h, 12h, 15h, 18h, 20h, 22h mỗi ngày (giờ VN), gửi danh sách việc quá hạn, đến hạn hôm nay, sắp đến hạn và đang theo dõi.
 
 ## Cách lưu dữ liệu
 - Danh sách việc nằm trong `tasks.json` của repo **private** `<repo>-data` (ví dụ `nhac-viec-data`).

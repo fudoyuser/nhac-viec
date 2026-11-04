@@ -3,8 +3,8 @@ name: Gửi mail nhắc việc
 on:
   schedule:
     # Giờ UTC. Việt Nam = UTC+7.
-    - cron: "5 0 * * *"    # 7:05 sáng
-    - cron: "5 13 * * *"   # 20:05 tối
+    # 7h, 9h, 12h, 15h, 18h, 20h, 22h giờ VN (chạy ở phút 05)
+    - cron: "5 0,2,5,8,11,13,15 * * *"
   workflow_dispatch: {}    # cho phép bấm "Run workflow" để gửi ngay
 
 permissions:
