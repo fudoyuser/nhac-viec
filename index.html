@@ -103,6 +103,18 @@
   .ghead b { font-size: 16px; }
   .ghead span { font-size: 13px; color: var(--muted); }
   small.help { color: var(--muted); font-size: 12px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 12px; }
+  @media (max-width: 520px) { .grid4 { grid-template-columns: 1fr 1fr; } }
+  label.chk { display: flex; gap: 8px; align-items: center; color: var(--text); font-size: 14px; margin-top: 12px; cursor: pointer; }
+  label.chk input { width: 18px; height: 18px; margin: 0; }
+  .count { margin-top: 10px; display: grid; gap: 8px; }
+  .crow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 14px; }
+  .crow .clabel { color: var(--muted); font-size: 13px; min-width: 52px; }
+  .crow input.cnum { width: 78px; padding: 4px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+  .crow .ctot { margin-right: 4px; }
+  .pace { font-size: 13px; color: var(--muted); }
+  .pace .late { color: var(--red); font-weight: 600; }
+  .pace .ok { color: var(--green); font-weight: 600; }
   .gm-row { display: flex; justify-content: space-between; align-items: center; gap: 6px 8px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
   .gm-row:last-child { border-bottom: 0; }
   .gm-row span { color: var(--muted); font-size: 13px; margin-left: 6px; }
@@ -182,10 +194,37 @@
     <div class="grid2">
       <div><label>Nhắc gấp trước (ngày)</label><input id="fRemind" type="number" min="0" max="60" value="3"></div>
       <div>
-        <label>Tiến độ: <span id="fProgVal">0%</span></label>
-        <input id="fProgress" type="range" min="0" max="100" step="5" value="0" style="padding:0;margin-top:8px">
+        <label>Đo tiến độ bằng</label>
+        <select id="fMeasure">
+          <option value="">Phần trăm (%)</option>
+          <option value="count">Số lượng (trang, tập, phút…)</option>
+        </select>
       </div>
     </div>
+    <div id="fPctBox">
+      <label>Tiến độ: <span id="fProgVal">0%</span></label>
+      <input id="fProgress" type="range" min="0" max="100" step="5" value="0" style="padding:0;margin-top:4px">
+    </div>
+    <div id="fCountBox" class="hidden">
+      <div class="grid4">
+        <div><label id="fCurLabel">Đang ở</label><input id="fCur" type="number" min="0" step="any" value="0" inputmode="decimal"></div>
+        <div><label>Tổng</label><input id="fTotal" type="number" min="1" step="any" placeholder="228" inputmode="decimal"></div>
+        <div><label>Đơn vị</label><input id="fUnit" list="unitList" maxlength="20" placeholder="trang"></div>
+        <div><label>Mỗi lần bấm +</label><input id="fStep" type="number" min="0" step="any" placeholder="10" inputmode="decimal"></div>
+      </div>
+      <label class="chk"><input type="checkbox" id="fSubOn"> Theo dõi thêm phần đang dở (ví dụ: phút của tập đang xem)</label>
+      <div id="fSubBox" class="grid4 hidden">
+        <div><label id="fSubCurLabel">Đang ở</label><input id="fSubCur" type="number" min="0" step="any" value="0" inputmode="decimal"></div>
+        <div><label>Dài</label><input id="fSubTotal" type="number" min="1" step="any" placeholder="48" inputmode="decimal"></div>
+        <div><label>Đơn vị</label><input id="fSubUnit" list="unitList" maxlength="20" placeholder="phút"></div>
+        <div><label>Mỗi lần bấm +</label><input id="fSubStep" type="number" min="0" step="any" placeholder="5" inputmode="decimal"></div>
+      </div>
+      <small class="help" id="fCountHelp" style="display:block;margin-top:6px"></small>
+    </div>
+    <datalist id="unitList">
+      <option value="trang"><option value="tập"><option value="phút"><option value="chương"><option value="bài">
+      <option value="giờ"><option value="km"><option value="lần"><option value="câu"><option value="video">
+    </datalist>
     <label>Việc con (không bắt buộc)</label>
     <div id="fItems"></div>
     <button class="sm" id="fItemAdd" type="button" style="margin-top:8px">+ Thêm việc con</button>
@@ -294,7 +333,71 @@
 
   // ---------- Quy tắc của một việc ----------
   const items = (t) => (Array.isArray(t.items) ? t.items : []);
+  // ----- Đo bằng số lượng (trang, tập, phút…) -----
+  const num = (v) => (isFinite(+v) && v !== "" && v !== null ? +v : 0);
+  const fmtNum = (n) => String(Math.round(n * 10) / 10).replace(".", ",");
+  const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
+  const DEFAULT_STEP = { trang: 10, "phút": 5, "tập": 1, "chương": 1, "bài": 1, "giờ": 1, km: 1, "câu": 5 };
+  const defaultStep = (unit) => DEFAULT_STEP[(unit || "").trim().toLowerCase()] || 1;
+  const isCount = (t) => t.measure === "count" && num(t.total) > 0;
+  const hasSub = (t) => isCount(t) && t.sub && num(t.sub.total) > 0;
+  const stepOf = (t) => (num(t.step) > 0 ? num(t.step) : defaultStep(t.unit));
+  const subStepOf = (t) => (num(t.sub?.step) > 0 ? num(t.sub.step) : defaultStep(t.sub?.unit));
+  const subFrac = (t) => (hasSub(t) && num(t.current) < num(t.total) ? Math.min(1, num(t.sub.current) / num(t.sub.total)) : 0);
+  const countValue = (t) => Math.min(num(t.total), num(t.current) + subFrac(t));
+  const subLabel = (t) => `${cap(t.unit)} ${Math.min(Math.floor(num(t.current)) + 1, Math.ceil(num(t.total)))}`;
+  function daysBetween(a, b) { return Math.round((parseYmd(b) - parseYmd(a)) / 86400000); }
+
+  // Nhịp độ cần đạt để kịp deadline, và có đang chậm so với kế hoạch không
+  function paceInfo(t) {
+    if (!isCount(t) || isDone(t) || !t.deadline) return null;
+    const remaining = num(t.total) - countValue(t);
+    const d = daysLeft(t);
+    if (d < 0) return { html: `<span class="late">Đã quá hạn, còn ${fmtNum(remaining)} ${esc(t.unit)}</span>`, perDay: null };
+    const days = d + 1;
+    const per = remaining / days;
+    const perText = per >= 1 ? Math.ceil(per) : fmtNum(per);
+    let html = `📈 Cần ~${perText} ${esc(t.unit)}/ngày để kịp deadline`;
+    if (t.startDate && t.startDate <= todayStr()) {
+      const totalDays = daysBetween(t.startDate, t.deadline) + 1;
+      const elapsed = daysBetween(t.startDate, todayStr());
+      if (totalDays > 0 && elapsed > 0) {
+        const start = num(t.startValue);
+        const expected = start + ((num(t.total) - start) * elapsed) / totalDays;
+        const gap = expected - countValue(t);
+        if (gap >= Math.max(0.5, stepOf(t) / 2)) html += ` · <span class="late">Đang chậm ${gap >= 1 ? Math.ceil(gap) : fmtNum(gap)} ${esc(t.unit)} so với kế hoạch</span>`;
+        else html += ` · <span class="ok">Đúng tiến độ ✓</span>`;
+      }
+    }
+    return { html, perDay: per };
+  }
+
+  // Áp dụng thao tác đếm lên một việc (dùng chung cho nút trên thẻ, ô nhập và nút trong email)
+  function applyCount(x, act, value) {
+    const total = num(x.total);
+    const sub = hasSub(x) ? x.sub : null;
+    const setMain = (v) => {
+      const before = num(x.current);
+      x.current = Math.max(0, Math.min(total, Math.round(v * 100) / 100));
+      if (sub && Math.floor(x.current) !== Math.floor(before)) sub.current = 0;
+    };
+    if (act === "cplus") setMain(num(x.current) + stepOf(x));
+    else if (act === "cminus") setMain(num(x.current) - stepOf(x));
+    else if (act === "cset") setMain(value);
+    else if (act === "done") { x.current = total; if (sub) sub.current = 0; }
+    else if (act === "reopen") setMain(Math.max(0, total - 1));
+    else if (sub && (act === "splus" || act === "sset" || act === "snext")) {
+      const v = act === "splus" ? num(sub.current) + subStepOf(x) : act === "sset" ? value : num(sub.total);
+      if (v >= num(sub.total)) { setMain(Math.floor(num(x.current)) + 1); sub.current = 0; return "next"; }
+      sub.current = Math.max(0, Math.round(v * 100) / 100);
+    }
+  }
+
   function progressOf(t) {
+    if (isCount(t)) {
+      if (num(t.current) >= num(t.total)) return 100;
+      return Math.min(99, Math.floor((countValue(t) / num(t.total)) * 100));
+    }
     const it = items(t);
     if (it.length) return Math.round((it.filter((i) => i.done).length / it.length) * 100);
     return Math.max(0, Math.min(100, +t.progress || 0));
@@ -414,6 +517,10 @@
               return x;
             }),
             note: t.note || "", createdAt: now,
+            ...(isCount(t) ? {
+              measure: "count", current: 0, total: t.total, unit: t.unit, step: t.step || "",
+              sub: hasSub(t) ? { ...t.sub, current: 0 } : null, startDate: today, startValue: 0,
+            } : {}),
           });
         }
       } else {
@@ -545,7 +652,34 @@
       (prioOf(t) === "high" ? '<span class="tag high">🔥 Cao</span>' : prioOf(t) === "low" ? '<span class="tag low">Thấp</span>' : "") +
       (showGroup && t.group ? `<span class="tag">${esc(t.group)}</span>` : "") +
       (REPEAT_TEXT[t.repeat] ? `<span class="tag">🔁 ${REPEAT_TEXT[t.repeat]}</span>` : "");
-    const quick = it.length
+    const counting = isCount(t);
+    let countBlock = "";
+    if (counting) {
+      const u = esc(t.unit || "");
+      const pace = paceInfo(t);
+      countBlock = `<div class="count">
+        <div class="crow">
+          <span class="clabel">${hasSub(t) ? "Đã xong" : "Đang ở"}</span>
+          <input type="number" class="cnum" data-k="main" min="0" max="${num(t.total)}" step="any" inputmode="decimal" value="${num(t.current)}" ${dis} aria-label="Đang ở">
+          <span class="ctot">/ ${fmtNum(num(t.total))} ${u}</span>
+          ${isDone(t) ? "" : `<button class="sm" data-act="cminus" ${dis}>−${fmtNum(stepOf(t))}</button>
+          <button class="sm" data-act="cplus" ${dis}>+${fmtNum(stepOf(t))} ${u}</button>`}
+        </div>
+        ${hasSub(t) && !isDone(t) ? `<div class="crow">
+          <span class="clabel">▶ ${esc(subLabel(t))}</span>
+          <input type="number" class="cnum" data-k="sub" min="0" max="${num(t.sub.total)}" step="any" inputmode="decimal" value="${num(t.sub.current)}" ${dis} aria-label="Đang dở">
+          <span class="ctot">/ ${fmtNum(num(t.sub.total))} ${esc(t.sub.unit || "")}</span>
+          <button class="sm" data-act="splus" ${dis}>+${fmtNum(subStepOf(t))} ${esc(t.sub.unit || "")}</button>
+          <button class="sm" data-act="snext" ${dis}>Xong ${esc(t.unit || "")} ✓</button>
+        </div>` : ""}
+        ${pace ? `<div class="pace">${pace.html}</div>` : ""}
+      </div>`;
+    }
+    const quick = counting
+      ? isDone(t)
+        ? `<button class="sm" data-act="reopen" ${dis}>Mở lại</button>`
+        : `<button class="sm" data-act="done" ${dis}>✓ Xong</button>`
+      : it.length
       ? ""
       : isDone(t)
         ? `<button class="sm" data-act="reopen" ${dis}>Mở lại</button>`
@@ -572,6 +706,7 @@
               i.deadline ? ` <span class="due ${i.done ? "" : itemLate(i) ? "late" : daysTo(i.deadline) === 0 ? "today" : ""}">📅 ${fmt(i.deadline).slice(0, 5)}${i.time ? " " + i.time : ""}</span>` : ""
             }</span>
           </li>`).join("")}</ul>` : ""}
+        ${countBlock}
         <div class="progress">
           <div class="pbar"><i style="width:${p}%;background:${p >= 100 ? "var(--green)" : "var(--primary)"}"></i></div>
           <span class="pval">${p}%</span>
@@ -684,6 +819,16 @@
     $("fRepeat").value = t?.repeat || "";
     $("fRemind").value = t ? remindOf(t) : 3;
     $("fProgress").value = t ? +t.progress || 0 : 0;
+    $("fMeasure").value = t?.measure === "count" ? "count" : "";
+    $("fCur").value = t?.measure === "count" ? num(t.current) : 0;
+    $("fTotal").value = t?.measure === "count" ? t.total : "";
+    $("fUnit").value = t?.measure === "count" ? t.unit || "" : "";
+    $("fStep").value = t?.measure === "count" && num(t.step) > 0 ? t.step : "";
+    $("fSubOn").checked = !!(t && hasSub(t));
+    $("fSubCur").value = t?.sub ? num(t.sub.current) : 0;
+    $("fSubTotal").value = t?.sub ? t.sub.total : "";
+    $("fSubUnit").value = t?.sub ? t.sub.unit || "" : "";
+    $("fSubStep").value = t?.sub && num(t.sub.step) > 0 ? t.sub.step : "";
     $("fItems").innerHTML = "";
     (t ? items(t) : []).forEach((i) => addItemRow(i));
     $("fNote").value = t?.note || "";
@@ -788,6 +933,21 @@
   });
 
   function syncProgressField() {
+    const counting = $("fMeasure").value === "count";
+    $("fPctBox").classList.toggle("hidden", counting);
+    $("fCountBox").classList.toggle("hidden", !counting);
+    $("fSubBox").classList.toggle("hidden", !$("fSubOn").checked);
+    $("fCurLabel").textContent = $("fSubOn").checked ? "Đã xong (số đã xem hết)" : "Đang ở";
+    const unit = $("fUnit").value.trim();
+    $("fStep").placeholder = defaultStep(unit);
+    $("fSubStep").placeholder = defaultStep($("fSubUnit").value.trim() || "phút");
+    $("fSubCurLabel").textContent = unit ? `Đang ở (${unit} ${Math.floor(num($("fCur").value)) + 1})` : "Đang ở";
+    if (counting) {
+      const fake = readCountFields();
+      $("fCountHelp").textContent = num(fake.total) > 0
+        ? `→ ${progressOf(fake)}% · ${fmtNum(countValue(fake))}/${fmtNum(num(fake.total))} ${fake.unit}`
+        : "Nhập tổng số (ví dụ sách 228 trang, phim 16 tập).";
+    }
     const it = readItems();
     const auto = it.length > 0;
     $("fProgress").disabled = auto;
@@ -795,6 +955,27 @@
       ? Math.round((it.filter((i) => i.done).length / it.length) * 100) + "% (tự tính theo việc con)"
       : $("fProgress").value + "%";
   }
+
+  function readCountFields() {
+    const sub = $("fSubOn").checked && num($("fSubTotal").value) > 0
+      ? { current: num($("fSubCur").value), total: num($("fSubTotal").value), unit: $("fSubUnit").value.trim() || "phút", step: num($("fSubStep").value) || "" }
+      : null;
+    return {
+      measure: "count",
+      current: num($("fCur").value),
+      total: num($("fTotal").value),
+      unit: $("fUnit").value.trim() || "trang",
+      step: num($("fStep").value) || "",
+      sub,
+    };
+  }
+  ["fMeasure", "fCur", "fTotal", "fUnit", "fStep", "fSubOn", "fSubCur", "fSubTotal", "fSubUnit", "fSubStep"].forEach((k) =>
+    $(k).addEventListener("input", syncProgressField));
+  $("fMeasure").addEventListener("change", syncProgressField);
+  $("fSubOn").addEventListener("change", () => {
+    if ($("fSubOn").checked && !$("fSubUnit").value) $("fSubUnit").value = "phút";
+    syncProgressField();
+  });
 
   $("btnAdd").onclick = () => openForm(null);
   $("fCancel").onclick = () => $("form").classList.add("hidden");
@@ -817,6 +998,21 @@
       note: $("fNote").value.trim(),
     };
     if (data.repeat && !data.deadline) return msg("Việc lặp lại cần có deadline", "err");
+    if ($("fMeasure").value === "count") {
+      const c = readCountFields();
+      if (!(c.total > 0)) return msg("Nhập tổng số (ví dụ 228 trang)", "err");
+      if ($("fSubOn").checked && !(c.sub && c.sub.total > 0)) return msg("Nhập độ dài phần đang dở (ví dụ 48 phút)", "err");
+      c.current = Math.min(c.current, c.total);
+      Object.assign(data, c);
+      // Mốc bắt đầu để tính "đang chậm/đúng tiến độ": đặt lại khi mới chuyển sang đo số lượng hoặc đổi tổng/deadline
+      const old = editingId && byId(tasks, editingId);
+      if (!old || old.measure !== "count" || num(old.total) !== c.total || old.deadline !== data.deadline || !old.startDate) {
+        data.startDate = todayStr();
+        data.startValue = c.current;
+      }
+    } else {
+      data.measure = "";
+    }
     const id = editingId || uid();
     const isNew = !editingId;
     $("form").classList.add("hidden");
@@ -847,11 +1043,39 @@
       const n = +el.dataset.n;
       return mutate((list) => { const x = byId(list, id); if (x && x.items?.[n]) x.items[n].done = !x.items[n].done; }, "Việc con: " + t.title);
     }
+    if (isCount(t) && ["cplus", "cminus", "splus", "snext", "done", "reopen"].includes(act)) {
+      let info = "";
+      const ok = await mutate((list) => {
+        const x = byId(list, id);
+        if (x && applyCount(x, act) === "next") info = ` Sang ${subLabel(x).toLowerCase()}.`;
+      }, `Tiến độ: ${t.title}`, "");
+      const x = byId(tasks, id);
+      if (ok && x) msg(isDone(x) ? `Đã xong “${x.title}” ✓${x.repeat ? " Đã tạo kỳ tiếp theo." : ""}` : `“${x.title}”: ${fmtNum(num(x.current))}/${fmtNum(num(x.total))} ${x.unit} ✓${info}`);
+      return;
+    }
     const step = { plus: 10, minus: -10 }[act];
     if (step) return mutate((list) => { const x = byId(list, id); if (x) x.progress = Math.max(0, Math.min(100, (+x.progress || 0) + step)); }, `Tiến độ: ${t.title}`);
     if (act === "done") return mutate((list) => { const x = byId(list, id); if (x) x.progress = 100; }, "Xong: " + t.title, t.repeat ? "Đã xong ✓ Đã tạo kỳ tiếp theo" : "Đã xong ✓");
     if (act === "reopen") return mutate((list) => { const x = byId(list, id); if (x) x.progress = 0; }, "Mở lại: " + t.title);
   });
+
+  // Gõ số trực tiếp: "Đang ở" trang/tập, hoặc phút đang dở
+  $("list").addEventListener("change", async (e) => {
+    const inp = e.target.closest("input.cnum");
+    if (!inp || saving) return;
+    const id = inp.closest(".task").dataset.id;
+    const t = byId(tasks, id);
+    if (!t || inp.value === "") return render();
+    const v = +inp.value;
+    let info = "";
+    const ok = await mutate((list) => {
+      const x = byId(list, id);
+      if (x && applyCount(x, inp.dataset.k === "sub" ? "sset" : "cset", v) === "next") info = ` Sang ${subLabel(x).toLowerCase()}.`;
+    }, `Tiến độ: ${t.title}`, "");
+    const x = byId(tasks, id);
+    if (ok && x) msg(isDone(x) ? `Đã xong “${x.title}” ✓` : `Đã lưu ✓${info}`);
+  });
+  $("list").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches("input.cnum")) e.target.blur(); });
 
   // ---------- Quản lý nhóm ----------
   $("btnGroups").onclick = () => {
@@ -960,8 +1184,17 @@
         const x = byId(list, id);
         if (!x) return;
         if (items(x).length) x.items.forEach((i) => (i.done = true));
+        if (isCount(x)) applyCount(x, "done");
         x.progress = 100;
       }, "Xong (từ email): " + t.title, `Đã đánh dấu xong “${t.title}” ✓${t.repeat ? " Đã tạo kỳ tiếp theo." : ""}`);
+    } else if (isCount(t) && (act === "plus" || act === "splus")) {
+      let info = "";
+      const ok = await mutate((list) => {
+        const x = byId(list, id);
+        if (x && applyCount(x, act === "plus" ? "cplus" : "splus") === "next") info = ` Sang ${subLabel(x).toLowerCase()}.`;
+      }, "Tiến độ (từ email): " + t.title, "");
+      const x = byId(tasks, id);
+      if (ok && x) msg(isDone(x) ? `Đã xong “${x.title}” ✓` : `“${x.title}”: ${fmtNum(num(x.current))}/${fmtNum(num(x.total))} ${x.unit}${hasSub(x) ? ` · ${subLabel(x)}: ${fmtNum(num(x.sub.current))}/${fmtNum(num(x.sub.total))} ${x.sub.unit}` : ""} ✓${info}`);
     } else if (act === "plus") {
       const ok = await mutate((list) => {
         const x = byId(list, id);

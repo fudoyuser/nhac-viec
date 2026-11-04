@@ -52,7 +52,93 @@ def items(t):
     return t.get("items") if isinstance(t.get("items"), list) else []
 
 
+# ----- Đo bằng số lượng (trang, tập, phút…) — giống hệt logic trên website -----
+DEFAULT_STEP = {"trang": 10, "phút": 5, "tập": 1, "chương": 1, "bài": 1, "giờ": 1, "km": 1, "câu": 5}
+
+
+def num(v):
+    try:
+        return float(v) if v not in (None, "") else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def fmt_num(n):
+    n = round(n * 10) / 10
+    return (str(int(n)) if n == int(n) else str(n)).replace(".", ",")
+
+
+def default_step(unit):
+    return DEFAULT_STEP.get((unit or "").strip().lower(), 1)
+
+
+def is_count(t):
+    return t.get("measure") == "count" and num(t.get("total")) > 0
+
+
+def has_sub(t):
+    return is_count(t) and isinstance(t.get("sub"), dict) and num(t["sub"].get("total")) > 0
+
+
+def step_of(t):
+    return num(t.get("step")) if num(t.get("step")) > 0 else default_step(t.get("unit"))
+
+
+def sub_step_of(t):
+    s_ = t.get("sub") or {}
+    return num(s_.get("step")) if num(s_.get("step")) > 0 else default_step(s_.get("unit"))
+
+
+def count_value(t):
+    frac = 0.0
+    if has_sub(t) and num(t.get("current")) < num(t.get("total")):
+        frac = min(1.0, num(t["sub"].get("current")) / num(t["sub"]["total"]))
+    return min(num(t.get("total")), num(t.get("current")) + frac)
+
+
+def sub_label(t):
+    unit = t.get("unit") or ""
+    n = min(int(num(t.get("current"))) + 1, int(-(-num(t.get("total")) // 1)))
+    return f"{unit[:1].upper()}{unit[1:]} {n}"
+
+
+def pace_text(t, now):
+    """Nhịp độ cần đạt để kịp deadline và có đang chậm không."""
+    if not is_count(t) or is_done(t) or not t.get("deadline"):
+        return ""
+    unit = html.escape(t.get("unit") or "")
+    remaining = num(t["total"]) - count_value(t)
+    d = days_left(t, now.date())
+    if d is None:
+        return ""
+    if d < 0:
+        return f'<b style="color:#dc2626">Đã quá hạn, còn {fmt_num(remaining)} {unit}</b>'
+    per = remaining / (d + 1)
+    per_txt = str(int(-(-per // 1))) if per >= 1 else fmt_num(per)
+    text = f"📈 Cần ~{per_txt} {unit}/ngày để kịp deadline"
+    try:
+        start = date.fromisoformat(t.get("startDate") or "")
+        total_days = (date.fromisoformat(t["deadline"]) - start).days + 1
+        elapsed = (now.date() - start).days
+    except ValueError:
+        return text
+    if total_days > 0 and elapsed > 0:
+        sv = num(t.get("startValue"))
+        expected = sv + (num(t["total"]) - sv) * elapsed / total_days
+        gap = expected - count_value(t)
+        if gap >= max(0.5, step_of(t) / 2):
+            g = str(int(-(-gap // 1))) if gap >= 1 else fmt_num(gap)
+            text += f' · <b style="color:#dc2626">Đang chậm {g} {unit} so với kế hoạch</b>'
+        else:
+            text += ' · <b style="color:#16a34a">Đúng tiến độ ✓</b>'
+    return text
+
+
 def progress_of(t):
+    if is_count(t):
+        if num(t.get("current")) >= num(t.get("total")):
+            return 100
+        return min(99, int(count_value(t) / num(t["total"]) * 100))
     it = items(t)
     if it:
         return round(sum(1 for i in it if i.get("done")) / len(it) * 100)
@@ -262,13 +348,42 @@ def task_html(t, now, site_url):
     buttons = ""
     if site_url and t.get("id"):
         tid = quote(str(t["id"]))
-        plus_text = "☑ Tích việc con tiếp theo" if any(not i.get("done") for i in it) else "+25%"
+        if is_count(t):
+            plus_text = f"+{fmt_num(step_of(t))} {html.escape(t.get('unit') or '')}"
+        elif any(not i.get("done") for i in it):
+            plus_text = "☑ Tích việc con tiếp theo"
+        else:
+            plus_text = "+25%"
+        sub_btn = ""
+        if has_sub(t):
+            sub_btn = button(
+                f"{site_url}?act=splus&id={tid}",
+                f"+{fmt_num(sub_step_of(t))} {html.escape(t['sub'].get('unit') or '')}",
+            )
         buttons = (
             '<div style="margin-top:8px">'
             + button(f"{site_url}?act=plus&id={tid}", plus_text)
+            + sub_btn
             + button(f"{site_url}?act=done&id={tid}", "✓ Xong", primary=True)
             + "</div>"
         )
+    count_html = ""
+    if is_count(t):
+        unit = html.escape(t.get("unit") or "")
+        count_html = (
+            f'<div style="font-size:14px;margin-top:6px">{"Đã xong" if has_sub(t) else "Đang ở"} <b>{fmt_num(num(t.get("current")))}</b>'
+            f' / {fmt_num(num(t["total"]))} {unit}</div>'
+        )
+        if has_sub(t) and not is_done(t):
+            sub = t["sub"]
+            count_html += (
+                f'<div style="font-size:14px">▶ {html.escape(sub_label(t))}: <b>{fmt_num(num(sub.get("current")))}</b>'
+                f' / {fmt_num(num(sub["total"]))} {html.escape(sub.get("unit") or "")}</div>'
+            )
+        pace = pace_text(t, now)
+        if pace:
+            count_html += f'<div style="font-size:13px;color:#555;margin-top:2px">{pace}</div>'
+
     return (
         '<div style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:8px">'
         + (f"<div>{tags}</div>" if tags else "")
@@ -276,6 +391,7 @@ def task_html(t, now, site_url):
         + f'<span style="font-size:13px;color:#555">{when_text(t, now)}</span>'
         + (f'<div style="font-size:13px;color:#444;margin-top:4px">{html.escape(note)}</div>' if note else "")
         + checklist
+        + count_html
         + bar(p)
         + buttons
         + "</div>"
